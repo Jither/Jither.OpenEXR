@@ -7,21 +7,27 @@ namespace Jither.OpenEXR;
 
 public class EXRPart
 {
-    public EXRVersion Version { get; }
-    public EXRHeader Header { get; }
-    public OffsetTable Offsets { get; }
+    // Used for reading of files
+    private readonly bool isSinglePartTiled;
+    private readonly bool isMultiPart;
+    private readonly OffsetTable offsets;
 
-    public ChannelList Channels => Header.Channels;
-    public EXRCompression Compression => Header.Compression;
-    public Box2i DataWindow => Header.DataWindow;
-    public Box2i DisplayWindow => Header.DisplayWindow;
-    public LineOrder LineOrder => Header.LineOrder;
-    public float PixelAspectRatio => Header.PixelAspectRatio;
-    public V2f ScreenWindowCenter => Header.ScreenWindowCenter;
-    public float ScreenWindowWidth => Header.ScreenWindowWidth;
+    // Used for writing of files
+    private long offsetTableOffset;
 
-    public string? Name => Header.Name;
-    public PartType Type => Header.Type ?? (Version.IsSinglePartTiled ? PartType.TiledImage : PartType.ScanLineImage);
+    private readonly EXRHeader header;
+
+    public ChannelList Channels => header.Channels;
+    public EXRCompression Compression => header.Compression;
+    public Box2i DataWindow => header.DataWindow;
+    public Box2i DisplayWindow => header.DisplayWindow;
+    public LineOrder LineOrder => header.LineOrder;
+    public float PixelAspectRatio => header.PixelAspectRatio;
+    public V2f ScreenWindowCenter => header.ScreenWindowCenter;
+    public float ScreenWindowWidth => header.ScreenWindowWidth;
+
+    public string? Name => header.Name;
+    public PartType Type => header.Type ?? (isSinglePartTiled ? PartType.TiledImage : PartType.ScanLineImage);
 
     public bool IsRGB => HasChannel("R") && HasChannel("G") && HasChannel("B");
     public bool HasAlpha => HasChannel("A");
@@ -31,12 +37,16 @@ public class EXRPart
     public int PixelsPerBlock => Compressor.ScanLinesPerBlock * DataWindow.Width;
     public int BytesPerBlock => BytesPerPixel * PixelsPerBlock;
 
-    private Compressor Compressor;
+    public bool HasLongNames => Name?.Length > 31 || header.Attributes.Any(attr => attr.Name.Length > 31 || attr.Type.Length > 31);
+
+    private readonly Compressor Compressor;
 
     public EXRPart(EXRReader reader, EXRVersion version, EXRHeader header)
     {
-        Version = version;
-        Header = header;
+        isSinglePartTiled = version.IsSinglePartTiled;
+        isMultiPart = version.IsMultiPart;
+
+        this.header = header;
 
         Compressor = Compression switch
         {
@@ -50,11 +60,11 @@ public class EXRPart
 
         int offsetTableSize;
 
-        if (Version.IsMultiPart)
+        if (version.IsMultiPart)
         {
             offsetTableSize = header.ChunkCount;
         }
-        else if (Version.IsSinglePartTiled)
+        else if (version.IsSinglePartTiled)
         {
             // TODO: offsetTable for single part tiled
             offsetTableSize = 0;
@@ -64,25 +74,46 @@ public class EXRPart
             offsetTableSize = (int)Math.Ceiling((double)DataWindow.Height / Compressor.ScanLinesPerBlock);
         }
 
-        Offsets = OffsetTable.ReadFrom(reader, offsetTableSize);
+        offsets = OffsetTable.ReadFrom(reader, offsetTableSize);
     }
 
-    public void WriteOffsetsTo(EXRWriter writer)
+    public T? GetAttribute<T>(string name)
     {
-
+        if (header.TryGetAttribute<T>(name, out var result))
+        {
+            return result;
+        }
+        return default;
     }
 
-    public void Decode(EXRReader reader, Stream destination, IList<string>? outputChannelOrder = null)
+    public void SetAttribute<T>(string name, T value)
+    {
+        header.SetAttribute(new EXRAttribute<T>(name, value));
+    }
+
+    public void WriteHeaderTo(EXRWriter writer)
+    {
+        header.WriteTo(writer);
+    }
+
+    public void WriteOffsetPlaceholdersTo(EXRWriter writer)
+    {
+        offsetTableOffset = writer.Position;
+        int offsetTableSize = (int)Math.Ceiling((double)DataWindow.Height / Compressor.ScanLinesPerBlock);
+        for (int i = 0; i < offsetTableSize; i++)
+        {
+            writer.WriteULong(0xffffffffffffffffUL);
+        }
+    }
+
+    public void Decode(EXRReader reader, Stream destination)
     {
         Decode(reader, (buffer, length) => destination.Write(buffer, 0, length));
     }
 
     public void Decode(EXRReader reader, Action<byte[], int> callback, IList<string>? outputChannelOrder = null)
     {
-        if (outputChannelOrder == null)
-        {
-            outputChannelOrder = Channels.Select(c => c.Name).ToArray();
-        }
+        outputChannelOrder ??= Channels.Select(c => c.Name).ToArray();
 
         byte[] buffer = ArrayPool<byte>.Shared.Rent(BytesPerBlock);
         try
@@ -133,10 +164,10 @@ public class EXRPart
         // The startOffset now also equals the number of bytes we're going to store per pixel
         int outputByteCount = startOffset * PixelsPerBlock;
 
-        for (int index = 0; index < Offsets.Count; index++)
+        for (int index = 0; index < offsets.Count; index++)
         {
             int y = DecodeScanLine(reader, buffer, index);
-            // The decompressed pixel data is stored with channels separated in alphabetical name order
+            // The decompressed pixel data is stored with channels separated and ordered alphabetically
             int sourceIndex = 0;
             int destIndex;
 
@@ -169,9 +200,9 @@ public class EXRPart
 
     private int DecodeScanLine(EXRReader reader, byte[] buffer, int index)
     {
-        var offset = Offsets[index];
+        var offset = offsets[index];
         reader.Seek(offset);
-        int partNumber = Version.IsMultiPart ? reader.ReadInt() : 0;
+        int partNumber = isMultiPart ? reader.ReadInt() : 0;
         int y = reader.ReadInt();
         int pixelDataSize = reader.ReadInt();
 
@@ -189,6 +220,6 @@ public class EXRPart
 
     public bool HasChannel(string name)
     {
-        return Header.Channels.Any(c => c.Name == name);
+        return header.Channels.Any(c => c.Name == name);
     }
 }

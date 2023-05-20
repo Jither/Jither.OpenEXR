@@ -1,12 +1,17 @@
-﻿namespace Jither.OpenEXR;
+﻿using System.Diagnostics;
+using System.Net.Http.Headers;
+
+namespace Jither.OpenEXR;
 
 public class EXRFile : IDisposable
 {
     private readonly List<EXRPart> parts = new();
+    private readonly Dictionary<string, EXRPart> partsByName = new();
     private EXRReader? reader;
 
-    public EXRVersion Version { get; private set; } = new EXRVersion(2, EXRVersionFlags.None);
+    public IReadOnlyDictionary<string, EXRPart> PartsByName => partsByName;
     public IReadOnlyList<EXRPart> Parts => parts;
+
     public IEnumerable<string?> PartNames => parts.Select(p => p.Name);
 
     public EXRFile()
@@ -45,22 +50,10 @@ public class EXRFile : IDisposable
 
     public void SaveAs(Stream stream)
     {
-        using (var writer = new EXRWriter(stream, Version.MaxNameLength))
+        var version = DetermineVersion();
+        using (var writer = new EXRWriter(stream, version.MaxNameLength))
         {
-            Write(writer);
-        }
-    }
-
-    public EXRPart? GetPartByName(string name)
-    {
-        return Parts.SingleOrDefault(p => p.Name == name);
-    }
-
-    public void SaveRaw(Stream destination, IList<string>? channelOrder = null)
-    {
-        if (reader != null)
-        {
-            Parts[0].Decode(reader, destination, channelOrder);
+            Write(writer, version);
         }
     }
 
@@ -72,15 +65,15 @@ public class EXRFile : IDisposable
             throw new EXRFormatException("Magic number not found.");
         }
 
-        Version = EXRVersion.ReadFrom(reader);
+        var version = EXRVersion.ReadFrom(reader);
 
         var headers = new List<EXRHeader>();
 
-        if (Version.IsMultiPart)
+        if (version.IsMultiPart)
         {
             while (true)
             {
-                var header = EXRHeader.ReadFrom(reader, Version.MaxNameLength);
+                var header = EXRHeader.ReadFrom(reader, version.MaxNameLength);
                 if (header.IsEmpty)
                 {
                     break;
@@ -90,36 +83,117 @@ public class EXRFile : IDisposable
         }
         else
         {
-            var header = EXRHeader.ReadFrom(reader, Version.MaxNameLength);
+            var header = EXRHeader.ReadFrom(reader, version.MaxNameLength);
             headers.Add(header);
         }
 
         for (int i = 0; i < headers.Count; i++)
         {
-            parts.Add(new EXRPart(reader, Version, headers[i]));
+            AddPart(new EXRPart(reader, version, headers[i]));
         }
     }
 
-
-    private void Write(EXRWriter writer)
+    public void AddPart(EXRPart part)
     {
+        if (part.Name != null)
+        {
+            if (partsByName.ContainsKey(part.Name))
+            {
+                throw new ArgumentException($"A part with the name '{part.Name}' already exists in this EXR file.");
+            }
+        }
+        else
+        {
+            if (parts.Any(p => p.Name == null))
+            {
+                throw new ArgumentException($"A nameless part already exists in this EXR file.");
+            }
+        }
+        parts.Add(part);
+        if (part.Name != null)
+        {
+            partsByName.Add(part.Name, part);
+        }
+    }
+
+    public void RemovePart(string name)
+    {
+        if (name == null)
+        {
+            parts.RemoveAll(p => p.Name == null);
+        }
+        else
+        {
+            parts.RemoveAll(p => p.Name == name);
+            partsByName.Remove(name);
+        }
+    }
+
+    private void Write(EXRWriter writer, EXRVersion version)
+    {
+        Validate();
+
         writer.WriteInt(20000630);
 
-        Version.WriteTo(writer);
+        version.WriteTo(writer);
 
         foreach (var part in parts)
         {
-            part.Header.WriteTo(writer);
+            part.WriteHeaderTo(writer);
         }
         
-        if (Version.IsMultiPart)
+        if (version.IsMultiPart)
         {
             writer.WriteByte(0);
         }
 
         foreach (var part in parts)
         {
-            part.WriteOffsetsTo(writer);
+            part.WriteOffsetPlaceholdersTo(writer);
+        }
+    }
+
+    private EXRVersion DetermineVersion()
+    {
+        byte versionNumber = 1;
+        EXRVersionFlags flags = EXRVersionFlags.None;
+        Debug.Assert(parts.Count > 0);
+
+        if (parts.Count > 1)
+        {
+            versionNumber = 2;
+            flags |= EXRVersionFlags.MultiPart;
+        }
+        
+        if (parts.Count == 1 && parts[0].Type == PartType.TiledImage)
+        {
+            flags |= EXRVersionFlags.IsSinglePartTiled;
+        }
+
+        if (parts.Any(p => p.Type == PartType.DeepScanLine || p.Type == PartType.DeepTiled))
+        {
+            versionNumber = 2;
+            flags |= EXRVersionFlags.NonImageParts;
+        }
+
+        if (parts.Any(p => p.HasLongNames))
+        {
+            flags |= EXRVersionFlags.LongNames;
+        }
+
+        return new EXRVersion(versionNumber, flags);
+    }
+
+    public void Validate()
+    {
+        if (parts.Count == 0)
+        {
+            throw new EXRFormatException($"File must have at least one part.");
+        }
+
+        if (parts.Count > 1 && parts.Any(p => p.Name == null))
+        {
+            throw new EXRFormatException($"All parts in multipart file must have a name.");
         }
     }
 

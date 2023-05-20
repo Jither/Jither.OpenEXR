@@ -13,8 +13,8 @@ public class EXRHeader
         0.3127f, 0.3290f
     );
 
-    private List<EXRAttribute> attributes = new();
-    private Dictionary<string, EXRAttribute> attributesByName = new();
+    private readonly List<EXRAttribute> attributes = new();
+    private readonly Dictionary<string, EXRAttribute> attributesByName = new();
 
     public IReadOnlyDictionary<string, EXRAttribute> AttributesByName => attributesByName;
     public IReadOnlyList<EXRAttribute> Attributes => attributes;
@@ -138,7 +138,7 @@ public class EXRHeader
 
     public void WriteTo(EXRWriter writer)
     {
-        foreach (var attribute in Attributes)
+        foreach (var attribute in attributes)
         {
             attribute.WriteTo(writer);
         }
@@ -153,8 +153,8 @@ public class EXRHeader
         if (attributesByName.TryGetValue(attribute.Name, out var existingAttribute))
         {
             attributes.Remove(existingAttribute);
-            attributes.Add(attribute);
         }
+        attributes.Add(attribute);
         attributesByName[attribute.Name] = attribute;
     }
 
@@ -184,7 +184,7 @@ public class EXRHeader
             return false;
         }
 
-        if (attr.Value == null)
+        if (attr.UntypedValue == null)
         {
             result = default;
             return !typeof(T).IsClass && !typeof(T).IsInterface && !typeof(T).IsArray;
@@ -192,16 +192,16 @@ public class EXRHeader
 
         if (typeof(T).IsEnum)
         {
-            if (Enum.TryParse(typeof(T), attr.Value.ToString(), true, out var enumResult))
+            if (Enum.TryParse(typeof(T), attr.UntypedValue.ToString(), true, out var enumResult))
             {
                 result = (T)enumResult;
                 return true;
             }
         }
 
-        if (typeof(T).IsAssignableFrom(attr.Value.GetType()))
+        if (typeof(T).IsAssignableFrom(attr.UntypedValue.GetType()))
         {
-            result = (T)attr.Value;
+            result = (T)attr.UntypedValue;
             return true;
         }
         result = default;

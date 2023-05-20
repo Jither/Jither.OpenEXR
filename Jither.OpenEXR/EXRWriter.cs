@@ -6,7 +6,7 @@ public class EXRWriter : IDisposable
 {
     private readonly BinaryWriter writer;
     private bool disposed = false;
-    private int maxNameLength;
+    private readonly int maxNameLength;
 
     public EXRWriter(BinaryWriter writer, int maxNameLength)
     {

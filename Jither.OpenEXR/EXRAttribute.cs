@@ -1,36 +1,53 @@
 ﻿using Jither.OpenEXR.Attributes;
-using SixLabors.ImageSharp;
-using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
-using System.Reflection.PortableExecutable;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
 
 namespace Jither.OpenEXR;
 
-public class EXRAttribute
+using Rational = Attributes.Rational;
+
+public abstract class EXRAttribute
 {
     public string Name { get; private set; }
-    public string Type { get; private set; }
-    public int Size { get; private set; }
-    public object Value { get; private set; }
+    public string Type => this.UntypedValue switch
+    {
+        double => "double",
+        float => "float",
+        int => "int",
+        string => "string",
+        Box2i => "box2i",
+        Box2f => "box2f",
+        Chromaticities => "chromaticities",
+        EXRCompression => "compression",
+        EnvironmentMap => "envmap",
+        KeyCode => "keycode",
+        LineOrder => "lineOrder",
+        M33f => "m33f",
+        M44f => "m44f",
+        Rational => "rational",
+        List<string> => "stringvector",
+        TileDesc => "tiledesc",
+        TimeCode => "timecode",
+        V2i => "v2i",
+        V2f => "v2f",
+        V3i => "v3i",
+        V3f => "v3f",
+        ChannelList => "chlist",
+        byte[] => "preview",
+        _ => throw new NotImplementedException($"Type name for {UntypedValue?.GetType()} not implemented.")
+    };
 
-    private EXRAttribute(string name, string type, int size, object value)
+    public abstract object? UntypedValue { get; }
+
+    protected EXRAttribute(string name)
     {
         Name = name;
-        Type = type;
-        Size = size;
-        Value = value;
     }
+
+    public abstract void WriteTo(EXRWriter writer);
 
     public static EXRAttribute? ReadFrom(EXRReader reader, int maxNameLength)
     {
         string name, type;
         int size;
-        object value;
 
         try
         {
@@ -72,66 +89,51 @@ public class EXRAttribute
         {
             case "box2i":
                 CheckSize(16);
-                value = new Box2i(reader.ReadInt(), reader.ReadInt(), reader.ReadInt(), reader.ReadInt());
-                break;
+                return new EXRAttribute<Box2i>(name, new Box2i(reader.ReadInt(), reader.ReadInt(), reader.ReadInt(), reader.ReadInt()));
             case "box2f":
                 CheckSize(16);
-                value = new Box2f(reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat());
-                break;
+                return new EXRAttribute<Box2f>(name, new Box2f(reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat()));
             case "chromaticities":
                 CheckSize(32);
-                value = new Chromaticities(reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat());
-                break;
+                return new EXRAttribute<Chromaticities>(name, new Chromaticities(reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat()));
             case "compression":
                 CheckSize(1);
-                value = (EXRCompression)reader.ReadByte();
-                break;
+                return new EXRAttribute<EXRCompression>(name, (EXRCompression)reader.ReadByte());
             case "double":
                 CheckSize(4);
-                value = reader.ReadDouble();
-                break;
+                return new EXRAttribute<double>(name, reader.ReadDouble());
             case "envmap":
                 CheckSize(1);
-                value = (EnvironmentMap)reader.ReadByte();
-                break;
+                return new EXRAttribute<EnvironmentMap>(name, (EnvironmentMap)reader.ReadByte());
             case "float":
                 CheckSize(4);
-                value = reader.ReadFloat();
-                break;
+                return new EXRAttribute<float>(name, reader.ReadFloat());
             case "int":
                 CheckSize(4);
-                value = reader.ReadInt();
-                break;
+                return new EXRAttribute<int>(name, reader.ReadInt());
             case "keycode":
                 CheckSize(28);
-                value = new KeyCode(reader.ReadInt(), reader.ReadInt(), reader.ReadInt(), reader.ReadInt(), reader.ReadInt(), reader.ReadInt(), reader.ReadInt());
-                break;
+                return new EXRAttribute<KeyCode>(name, new KeyCode(reader.ReadInt(), reader.ReadInt(), reader.ReadInt(), reader.ReadInt(), reader.ReadInt(), reader.ReadInt(), reader.ReadInt()));
             case "lineOrder":
                 CheckSize(1);
-                value = (LineOrder)reader.ReadByte();
-                break;
+                return new EXRAttribute<LineOrder>(name, (LineOrder)reader.ReadByte());
             case "m33f":
                 CheckSize(36);
-                value = new M33f(reader.ReadFloatArray(9));
-                break;
+                return new EXRAttribute<M33f>(name, new M33f(reader.ReadFloatArray(9)));
             case "m44f":
                 CheckSize(64);
-                value = new M44f(reader.ReadFloatArray(16));
-                break;
+                return new EXRAttribute<M44f>(name, new M44f(reader.ReadFloatArray(16)));
             case "rational":
                 CheckSize(8);
-                value = new Attributes.Rational(reader.ReadInt(), reader.ReadUInt());
-                break;
+                return new EXRAttribute<Rational>(name, new Rational(reader.ReadInt(), reader.ReadUInt()));
             case "string":
-                value = reader.ReadString(size);
-                break;
+                return new EXRAttribute<string>(name, reader.ReadString(size));
             case "stringvector":
                 var list = new List<string>();
                 if (size != 0 && size < 4)
                 {
                     throw new EXRFormatException($"Expected size of 0 or 4+ for size of attribute {name} (type: {type}), but was: {size}");
                 }
-                value = list;
                 long totalRead = 0;
 
                 while (totalRead < size)
@@ -145,52 +147,53 @@ public class EXRAttribute
                 {
                     throw new EXRFormatException($"Attribute {name} (type: {type}) declared size to be {size} bytes, but read {totalRead}");
                 }
-                break;
+                return new EXRAttribute<List<string>>(name, list);
             case "tiledesc":
                 CheckSize(9);
-                value = new TileDesc(reader.ReadUInt(), reader.ReadUInt(), reader.ReadByte());
-                break;
+                return new EXRAttribute<TileDesc>(name, new TileDesc(reader.ReadUInt(), reader.ReadUInt(), reader.ReadByte()));
             case "timecode":
                 CheckSize(8);
-                value = new TimeCode(reader.ReadUInt(), reader.ReadUInt());
-                break;
+                return new EXRAttribute<TimeCode>(name, new TimeCode(reader.ReadUInt(), reader.ReadUInt()));
             case "v2i":
                 CheckSize(8);
-                value = new V2i(reader.ReadInt(), reader.ReadInt());
-                break;
+                return new EXRAttribute<V2i>(name, new V2i(reader.ReadInt(), reader.ReadInt()));
             case "v2f":
                 CheckSize(8);
-                value = new V2f(reader.ReadFloat(), reader.ReadFloat());
-                break;
+                return new EXRAttribute<V2f>(name, new V2f(reader.ReadFloat(), reader.ReadFloat()));
             case "v3i":
                 CheckSize(12);
-                value = new V3i(reader.ReadInt(), reader.ReadInt(), reader.ReadInt());
-                break;
+                return new EXRAttribute<V3i>(name, new V3i(reader.ReadInt(), reader.ReadInt(), reader.ReadInt()));
             case "v3f":
                 CheckSize(12);
-                value = new V3f(reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat());
-                break;
+                return new EXRAttribute<V3f>(name, new V3f(reader.ReadFloat(), reader.ReadFloat(), reader.ReadFloat()));
             case "chlist":
                 try
                 {
                     var channelList = ChannelList.ReadFrom(reader, size);
-                    value = channelList;
+                    return new EXRAttribute<ChannelList>(name, channelList);
                 }
                 catch (Exception ex)
                 {
                     throw new EXRFormatException($"Failed reading channel list '{name}'.", ex);
                 }
-                break;
             case "preview":
             default:
-                value = reader.ReadBytes(size);
-                break;
+                return new EXRAttribute<byte[]>(name, reader.ReadBytes(size));
         }
+    }
+}
 
-        return new EXRAttribute(name, type, size, value);
+public class EXRAttribute<T> : EXRAttribute
+{
+    public T Value { get; private set; }
+    public override object? UntypedValue => Value;
+
+    public EXRAttribute(string name, T value) : base(name)
+    {
+        Value = value;
     }
 
-    public void WriteTo(EXRWriter writer)
+    public override void WriteTo(EXRWriter writer)
     {
         if (Name == null)
         {
