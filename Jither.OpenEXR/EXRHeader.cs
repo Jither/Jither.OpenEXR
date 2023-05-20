@@ -158,7 +158,7 @@ public class EXRHeader
         attributesByName[attribute.Name] = attribute;
     }
 
-    private T GetAttributeOrThrow<T>(string name)
+    public T GetAttributeOrThrow<T>(string name)
     {
         if (!TryGetAttribute<T>(name, out var attribute) || attribute == null)
         {

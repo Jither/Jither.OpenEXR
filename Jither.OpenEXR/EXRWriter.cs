@@ -36,10 +36,15 @@ public class EXRWriter : IDisposable
     public void WriteFloat(float value) => writer.Write(value);
     public void WriteDouble(double value) => writer.Write(value);
 
-    public void Seek(ulong offset, SeekOrigin origin = SeekOrigin.Begin)
+    public void Seek(long offset, SeekOrigin origin = SeekOrigin.Begin)
     {
         // OpenEXR uses unsigned long offsets - we have to settle with signed. "8.589.934.592 gigabytes ought to be enough for everybody".
-        writer.BaseStream.Seek((long)offset, origin);
+        writer.BaseStream.Seek(offset, origin);
+    }
+
+    public Stream GetStream()
+    {
+        return writer.BaseStream;
     }
 
     public void WriteFloatArray(IEnumerable<float> value)

@@ -40,10 +40,10 @@ public class EXRReader : IDisposable
     public float ReadFloat() => reader.ReadSingle();
     public double ReadDouble() => reader.ReadDouble();
 
-    public void Seek(ulong offset)
+    public void Seek(long offset)
     {
         // OpenEXR uses unsigned long offsets - we have to settle with signed. "8.589.934.592 gigabytes ought to be enough for everybody".
-        reader.BaseStream.Seek((long)offset, SeekOrigin.Begin);
+        reader.BaseStream.Seek(offset, SeekOrigin.Begin);
     }
 
     public Stream GetChunkStream(int length)

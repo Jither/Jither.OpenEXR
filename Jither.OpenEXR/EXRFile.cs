@@ -39,7 +39,7 @@ public class EXRFile : IDisposable
     private static EXRFile FromReader(EXRReader reader)
     {
         var result = new EXRFile(reader);
-        result.Read(reader);
+        result.ReadHeaders(reader);
         return result;
     }
 
@@ -53,11 +53,11 @@ public class EXRFile : IDisposable
         var version = DetermineVersion();
         using (var writer = new EXRWriter(stream, version.MaxNameLength))
         {
-            Write(writer, version);
+            WriteHeaders(writer, version);
         }
     }
 
-    private void Read(EXRReader reader)
+    private void ReadHeaders(EXRReader reader)
     {
         var magicNumber = reader.ReadInt();
         if (magicNumber != 20000630)
@@ -87,9 +87,11 @@ public class EXRFile : IDisposable
             headers.Add(header);
         }
 
-        for (int i = 0; i < headers.Count; i++)
+        foreach (var header in headers)
         {
-            AddPart(new EXRPart(reader, version, headers[i]));
+            var part = new EXRPart(header);
+            part.DataReader = new EXRPartDataReader(part, version, reader);
+            AddPart(part);
         }
     }
 
@@ -129,7 +131,7 @@ public class EXRFile : IDisposable
         }
     }
 
-    private void Write(EXRWriter writer, EXRVersion version)
+    private void WriteHeaders(EXRWriter writer, EXRVersion version)
     {
         Validate();
 
@@ -149,7 +151,8 @@ public class EXRFile : IDisposable
 
         foreach (var part in parts)
         {
-            part.WriteOffsetPlaceholdersTo(writer);
+            part.DataWriter = new EXRPartDataWriter(part, writer);
+            part.DataWriter.WriteOffsetPlaceholders();
         }
     }
 

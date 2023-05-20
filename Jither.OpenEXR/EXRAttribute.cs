@@ -293,7 +293,7 @@ public class EXRAttribute<T> : EXRAttribute
                     writer.WriteString(str);
                 }
                 var endPosition = writer.Position;
-                writer.Seek((ulong)sizePosition, SeekOrigin.Begin);
+                writer.Seek(sizePosition, SeekOrigin.Begin);
                 WriteSize((int)(endPosition - sizePosition - 4));
                 writer.Seek(0, SeekOrigin.End);
                 break;
