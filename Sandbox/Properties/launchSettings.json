@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Sandbox": {
+      "commandName": "Project",
+      "commandLineArgs": "..\\..\\..\\..\\openexr-images-main\\uncompressed.exr"
+    }
+  }
+}
