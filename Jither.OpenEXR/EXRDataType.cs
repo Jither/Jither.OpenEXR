@@ -18,7 +18,7 @@ public enum EXRDataType
     Float = 2
 }
 
-public static class PixelTypeExtensions
+public static class EXRDataTypeExtensions
 {
     public static int GetBytesPerPixel(this EXRDataType pixelType)
     {

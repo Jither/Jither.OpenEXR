@@ -1,10 +1,8 @@
 ﻿using Jither.OpenEXR.Attributes;
-using Jither.OpenEXR.Compression;
-using System.ComponentModel.DataAnnotations;
 
 namespace Jither.OpenEXR;
 
-public class EXRHeader
+internal class EXRHeader
 {
     public static readonly Chromaticities DefaultChromaticities = new(
         0.6400f, 0.3300f,
@@ -167,9 +165,14 @@ public class EXRHeader
     {
         if (attributesByName.TryGetValue(attribute.Name, out var existingAttribute))
         {
+            int index = attributes.IndexOf(existingAttribute);
             attributes.Remove(existingAttribute);
+            attributes.Insert(index, attribute);
         }
-        attributes.Add(attribute);
+        else
+        {
+            attributes.Add(attribute);
+        }
         attributesByName[attribute.Name] = attribute;
     }
 

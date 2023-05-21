@@ -11,21 +11,21 @@ public class RLECompressor : Compressor
 
     public override void Compress(Stream source, Stream dest)
     {
-        int end = (int)source.Length;
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(end);
+        int length = (int)source.Length;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(length);
         try
         {
             source.Read(buffer);
-            ReorderAndPredict(buffer, end);
+            ReorderAndPredict(buffer, length);
 
             int runs = 0;
             int rune = 1;
             int bytesWritten = 0;
-            while (runs < end)
+            while (runs < length)
             {
                 byte runLength = 0;
                 byte value = buffer[runs];
-                while (rune < end && buffer[rune] == value && runLength < MAX_RUN_LENGTH)
+                while (rune < length && buffer[rune] == value && runLength < MAX_RUN_LENGTH)
                 {
                     rune++;
                     runLength++;
@@ -41,13 +41,13 @@ public class RLECompressor : Compressor
                 else
                 {
                     runLength++;
-                    while (rune < end &&
+                    while (rune < length &&
                         ((
-                            (rune + 1 >= end) ||
+                            (rune + 1 >= length) ||
                             (buffer[rune] != buffer[rune + 1])
                         ) ||
                         (
-                            (rune + 2 >= end) ||
+                            (rune + 2 >= length) ||
                             (buffer[rune + 1] != buffer[rune + 2])
                         )) &&
                         runLength < MAX_RUN_LENGTH)
@@ -72,7 +72,8 @@ public class RLECompressor : Compressor
 
     public override void Decompress(Stream source, Stream dest)
     {
-        byte[] buffer = ArrayPool<byte>.Shared.Rent((int)dest.Length);
+        int length = (int)dest.Length;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(length);
         try
         {
             int bufferIndex = 0;
@@ -111,77 +112,6 @@ public class RLECompressor : Compressor
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
-        }
-    }
-
-    private static void UnpredictAndReorder(byte[] buffer, int length)
-    {
-        byte[] temp = ArrayPool<byte>.Shared.Rent(length);
-        try
-        {
-            // Convert deltas to actual values
-            int t1 = 1;
-            temp[0] = buffer[0];
-            while (t1 < length)
-            {
-                int d = (sbyte)buffer[t1 - 1] + (sbyte)buffer[t1] - 128;
-                temp[t1] = unchecked((byte)d);
-                t1++;
-            }
-
-            // Data is split into two parts containing the bytes at odd and even offsets, respectively. Reorder them:
-            t1 = 0;
-            int t2 = (length + 1) / 2;
-            int s = 0;
-            while (s < length)
-            {
-                buffer[s++] = temp[t1++];
-                if (s < length)
-                {
-                    buffer[s++] = temp[t2++];
-                }
-            }
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(temp);
-        }
-    }
-
-    private static void ReorderAndPredict(byte[] buffer, int length)
-    {
-        byte[] temp = ArrayPool<byte>.Shared.Rent(length);
-        try
-        {
-            // Split data into two parts containing the bytes at odd and even offsets, respectively.
-            int t1 = 0;
-            int t2 = (length + 1) / 2;
-            int s = 0;
-
-            while (s < length)
-            {
-                temp[t1++] = buffer[s++];
-                if (s < length)
-                {
-                    temp[t2++] = buffer[s++];
-                }
-            }
-
-            // Convert values to deltas
-            t1 = 1;
-            byte previous = temp[0];
-            buffer[0] = previous;
-            while (t1 < length)
-            {
-                byte current = temp[t1];
-                int d = (sbyte)(current - previous + 128 + 256);
-                previous = current;
-                buffer[t1++] = unchecked((byte)d);
-            }
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(temp);
         }
     }
 }

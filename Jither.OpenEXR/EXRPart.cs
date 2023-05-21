@@ -102,7 +102,7 @@ public class EXRPart
 
     public bool HasLongNames => Name?.Length > 31 || header.Attributes.Any(attr => attr.Name.Length > 31 || attr.Type.Length > 31);
 
-    public EXRPart(EXRHeader header)
+    internal EXRPart(EXRHeader header)
     {
         this.header = header;
     }
