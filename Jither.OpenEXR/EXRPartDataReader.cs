@@ -131,15 +131,14 @@ public class EXRPartDataReader : EXRPartDataHandler
         int pixelDataSize = reader.ReadInt();
 
         var chunkStream = reader.GetChunkStream(pixelDataSize);
-        int bytesRead = 0;
-        using (var destStream = new MemoryStream(dest, index, BytesPerBlock))
+        int bytesToRead = chunkIndex < chunkCount - 1 ? BytesPerBlock : Math.Min(BytesPerBlock, BytesInLastBlock);
+        using (var destStream = new MemoryStream(dest, index, bytesToRead))
         {
             compressor.Decompress(chunkStream, destStream);
-            bytesRead = (int)destStream.Position;
         }
 
         chunkIndex++;
 
-        return bytesRead;
+        return bytesToRead;
     }
 }

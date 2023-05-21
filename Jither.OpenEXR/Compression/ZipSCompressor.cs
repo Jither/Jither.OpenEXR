@@ -1,6 +1,5 @@
 ﻿using System.Buffers;
 using System.IO.Compression;
-using System.Text;
 
 namespace Jither.OpenEXR.Compression;
 

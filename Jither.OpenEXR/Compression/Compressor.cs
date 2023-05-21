@@ -19,12 +19,13 @@ public abstract class Compressor
         try
         {
             // Convert deltas to actual values
-            int t1 = 1;
-            temp[0] = buffer[0];
+            int t1 = 0;
+            byte previous = temp[1] = buffer[t1];
+            t1++;
             while (t1 < length)
             {
-                int d = (sbyte)buffer[t1 - 1] + (sbyte)buffer[t1] - 128;
-                temp[t1] = unchecked((byte)d);
+                sbyte delta = (sbyte)buffer[t1];
+                temp[t1] = previous = (byte)(previous + delta - 128);
                 t1++;
             }
 

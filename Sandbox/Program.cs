@@ -20,9 +20,9 @@ internal class Program
             }
             
             file.ForceVersion2 = true;
-            file.Parts[0].Compression = EXRCompression.ZIP;
+            file.Parts[0].Compression = EXRCompression.None;
             
-            file.Write(@"D:\test-zip.exr");
+            file.Write(@"D:\test.exr");
             int partIndex = 0;
             foreach (var part in file.DataWriters)
             {
