@@ -7,6 +7,7 @@ public abstract class EXRPartDataHandler
     protected readonly EXRPart part;
     protected readonly Compressor compressor;
     protected int PixelsPerBlock => compressor.ScanLinesPerBlock * part.DataWindow.Width;
+    protected int PixelsPerScanLine => part.DataWindow.Width;
     protected int BytesPerPixel => part.Channels.Sum(c => c.Type.GetBytesPerPixel());
     protected int BitsPerPixel => BytesPerPixel * 8;
     public int BytesPerBlock => BytesPerPixel * PixelsPerBlock;

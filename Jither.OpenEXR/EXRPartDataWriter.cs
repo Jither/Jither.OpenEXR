@@ -42,7 +42,17 @@ public class EXRPartDataWriter : EXRPartDataHandler
         }
     }
 
-    public void WriteBlockInterleaved(byte[] data, IEnumerable<string> channelOrder, int index = 0)
+    public void WriteInterleaved(byte[] data, IEnumerable<string> channelOrder)
+    {
+        int sourceIndex = 0;
+        for (int i = 0; i < chunkCount; i++)
+        {
+            int bytesWritten = WriteBlockInterleaved(data, channelOrder, sourceIndex);
+            sourceIndex += bytesWritten;
+        }
+    }
+
+    public int WriteBlockInterleaved(byte[] data, IEnumerable<string> channelOrder, int index = 0)
     {
         CheckWriteCount(data, index);
         var pixelData = ArrayPool<byte>.Shared.Rent(BytesPerBlock);
@@ -51,24 +61,35 @@ public class EXRPartDataWriter : EXRPartDataHandler
             // Rearrange block from interleaved channels into consecutive channels
             var sourceOffsets = GetInterleaveOffsets(channelOrder, out var bytesPerPixel, allChannelsRequired: true);
 
-            int channelIndex = 0;
             int destIndex = 0;
-            foreach (var channel in part.Channels)
+            for (int scanline = 0; scanline < compressor.ScanLinesPerBlock; scanline++)
             {
-                int channelBytesPerPixel = channel.Type.GetBytesPerPixel();
-                int sourceIndex = sourceOffsets[channelIndex++];
-
-                for (int i = 0; i < PixelsPerBlock; i++)
+                int channelIndex = 0;
+                int scanlineIndex = index + scanline * PixelsPerScanLine * bytesPerPixel;
+                foreach (var channel in part.Channels)
                 {
-                    for (int j = 0; j < channelBytesPerPixel; j++)
+                    int channelBytesPerPixel = channel.Type.GetBytesPerPixel();
+                    int sourceIndex = scanlineIndex + sourceOffsets[channelIndex++];
+
+                    if (sourceIndex < 0)
                     {
-                        pixelData[destIndex++] = data[sourceIndex + j];
+                        // Skip channel
+                        // TODO: Check that this is right...
+                        continue;
                     }
-                    sourceIndex += channelBytesPerPixel;
+
+                    for (int i = 0; i < PixelsPerScanLine; i++)
+                    {
+                        for (int j = 0; j < channelBytesPerPixel; j++)
+                        {
+                            pixelData[destIndex++] = data[sourceIndex + j];
+                        }
+                        sourceIndex += BytesPerPixel;
+                    }
                 }
             }
 
-            InternalWriteBlock(data, index);
+            return InternalWriteBlock(pixelData, 0);
         }
         finally
         {

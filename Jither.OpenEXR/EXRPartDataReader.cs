@@ -79,6 +79,8 @@ public class EXRPartDataReader : EXRPartDataHandler
         // read blocks in file sequential order and reconstruct the scanline order - avoiding file seeks. For now, we just follow the
         // offset order.
 
+        // TODO: ReadBlockInterleaved is definitely wrong. Test and fix...
+
         // Collect byte offsets for the channel components in each pixel. I.e., at what byte offset within the channel-interleaved pixel should each channel be stored?
         var destOffsets = GetInterleaveOffsets(channelOrder, out var outputBytesPerPixel);
         int outputByteCount = outputBytesPerPixel * PixelsPerBlock;
@@ -93,26 +95,29 @@ public class EXRPartDataReader : EXRPartDataHandler
             int destIndex;
 
             int channelIndex = 0;
-            foreach (var channel in part.Channels)
+            for (int scanline = 0; scanline < compressor.ScanLinesPerBlock; scanline++)
             {
-                int channelBytesPerPixel = channel.Type.GetBytesPerPixel();
-                destIndex = destOffsets[channelIndex++];
+                foreach (var channel in part.Channels)
+                {
+                    int channelBytesPerPixel = channel.Type.GetBytesPerPixel();
+                    destIndex = destOffsets[channelIndex++];
 
-                if (destIndex >= 0)
-                {
-                    for (int i = 0; i < PixelsPerBlock; i++)
+                    if (destIndex >= 0)
                     {
-                        for (int j = 0; j < channelBytesPerPixel; j++)
+                        for (int i = 0; i < PixelsPerScanLine; i++)
                         {
-                            dest[destIndex + j] = data[sourceIndex++];
+                            for (int j = 0; j < channelBytesPerPixel; j++)
+                            {
+                                dest[destIndex + j] = data[sourceIndex++];
+                            }
+                            destIndex += outputBytesPerPixel;
                         }
-                        destIndex += outputBytesPerPixel;
                     }
-                }
-                else
-                {
-                    // Skip this channel
-                    sourceIndex += channelBytesPerPixel * PixelsPerBlock;
+                    else
+                    {
+                        // Skip this channel
+                        sourceIndex += channelBytesPerPixel * PixelsPerScanLine;
+                    }
                 }
             }
         }

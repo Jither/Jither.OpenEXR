@@ -37,6 +37,9 @@ public class EXRFile : IDisposable
     /// </summary>
     public EXRVersion? OriginalVersion { get; private set; }
 
+    /// <summary>
+    /// Creates a new, empty OpenEXR file.
+    /// </summary>
     public EXRFile()
     {
 

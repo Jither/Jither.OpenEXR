@@ -19,7 +19,11 @@ internal class EXRHeader
 
     public bool IsEmpty => attributes.Count == 0;
 
-    public ChannelList Channels => GetAttributeOrThrow<ChannelList>(AttributeNames.Channels);
+    public ChannelList Channels
+    {
+        get => GetAttributeOrThrow<ChannelList>(AttributeNames.Channels);
+        set => SetAttribute(new EXRAttribute<ChannelList>(AttributeNames.Channels, value));
+    }
 
     public EXRCompression Compression
     {

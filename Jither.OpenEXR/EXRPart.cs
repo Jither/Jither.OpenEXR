@@ -11,7 +11,11 @@ public class EXRPart
     /// <summary>
     /// Description of the image channels stored in the part.
     /// </summary>
-    public ChannelList Channels => header.Channels;
+    public ChannelList Channels
+    {
+        get => header.Channels;
+        set => header.Channels = value;
+    }
 
     /// <summary>
     /// Specifies the compression method applied to the pixel data of all channels in the part.
@@ -115,6 +119,26 @@ public class EXRPart
     /// Provides access to writing data for a part. Will be null unless <see cref="EXRFile.Write"/> has been called and headers have been written.
     /// </summary>
     public EXRPartDataWriter? DataWriter { get; private set; }
+
+    /// <summary>
+    /// Creates a new part with default required attributes.
+    /// </summary>
+    public EXRPart(Box2i dataWindow, Box2i? displayWindow = null, string? name = null)
+    {
+        header = new EXRHeader();
+        if (name != null)
+        {
+            header.Name = name;
+        }
+        // Set default required headers:
+        header.DataWindow = dataWindow;
+        header.DisplayWindow = displayWindow ?? header.DataWindow;
+        header.Compression = EXRCompression.None;
+        header.LineOrder = LineOrder.IncreasingY;
+        header.PixelAspectRatio = 1;
+        header.ScreenWindowCenter = new V2f(0, 0);
+        header.ScreenWindowWidth = 1;
+    }
 
     internal EXRPart(EXRHeader header)
     {

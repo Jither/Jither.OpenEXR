@@ -11,7 +11,7 @@ namespace Examples;
 internal class ReadFile : Example
 {
     public override string Name => "Read a file and retrieve header information";
-    public override int Order => 1;
+    public override int Order => 0;
 
     public override void Run()
     {

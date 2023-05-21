@@ -3,6 +3,10 @@ using System.Diagnostics;
 
 namespace Jither.OpenEXR;
 
+/// <summary>
+/// List of channels for a part. Note that, per OpenEXR specification, the channel list is always kept
+/// alphabetically sorted by name.
+/// </summary>
 public class ChannelList : IReadOnlyList<Channel>
 {
     private readonly List<Channel> channels = new();
@@ -13,9 +17,62 @@ public class ChannelList : IReadOnlyList<Channel>
 
     public int Count => channels.Count;
 
+    public static ChannelList CreateRGBHalf(bool linear = false)
+    {
+        var result = new ChannelList
+        {
+            linear ? Channel.R_HalfLinear : Channel.R_Half,
+            linear ? Channel.G_HalfLinear : Channel.G_Half,
+            linear ? Channel.B_HalfLinear : Channel.B_Half
+        };
+        return result;
+    }
+
+    public static ChannelList CreateRGBFloat(bool linear = false)
+    {
+        var result = new ChannelList
+        {
+            linear ? Channel.R_FloatLinear : Channel.R_Float,
+            linear ? Channel.G_FloatLinear : Channel.G_Float,
+            linear ? Channel.B_FloatLinear : Channel.B_Float
+        };
+        return result;
+    }
+
+    public static ChannelList CreateRGBAHalf(bool linear = false)
+    {
+        var result = CreateRGBHalf(linear);
+        result.Add(linear ? Channel.A_HalfLinear : Channel.A_Half);
+        return result;
+    }
+
+    public static ChannelList CreateRGBAFloat(bool linear = false)
+    {
+        var result = CreateRGBFloat(linear);
+        result.Add(linear ? Channel.A_FloatLinear : Channel.A_Float);
+        return result;
+    }
+
     public int IndexOf(string name)
     {
         return channels.FindIndex(c => c.Name == name);
+    }
+
+    /// <summary>
+    /// Adds a channel definition to the channel list.
+    /// </summary>
+    public void Add(Channel channel)
+    {
+        channels.Add(channel);
+        UpdateSorting();
+    }
+
+    /// <summary>
+    /// Removes a channel with the given name from the channel list.
+    /// </summary>
+    public void Remove(string name)
+    {
+        channels.RemoveAll(c => c.Name == name);
     }
 
     public static ChannelList ReadFrom(EXRReader reader, int size)
@@ -35,7 +92,7 @@ public class ChannelList : IReadOnlyList<Channel>
         while (ReadChannel(reader, out var channel, out bytesRead))
         {
             Debug.Assert(channel != null, "ReadChannel returned true, although channel is null!");
-            result.channels.Add(channel);
+            result.Add(channel);
             totalSize += bytesRead;
 
             CheckSize();
@@ -59,11 +116,11 @@ public class ChannelList : IReadOnlyList<Channel>
             writer.WriteStringZ(channel.Name);
             writer.WriteInt((int)channel.Type);
             writer.WriteByte((byte)channel.PerceptualTreatment);
+            writer.WriteByte(0);
+            writer.WriteByte(0);
+            writer.WriteByte(0);
             writer.WriteInt(channel.XSampling);
             writer.WriteInt(channel.YSampling);
-            writer.WriteByte(0);
-            writer.WriteByte(0);
-            writer.WriteByte(0);
         }
         writer.WriteByte(0);
     }
@@ -83,15 +140,20 @@ public class ChannelList : IReadOnlyList<Channel>
             name, 
             (EXRDataType)reader.ReadInt(),
             perceptualTreatment: (PerceptualTreatment)reader.ReadByte(),
-            xSampling: reader.ReadInt(),
-            ySampling: reader.ReadInt(),
             reserved0: reader.ReadByte(),
             reserved1: reader.ReadByte(),
-            reserved2: reader.ReadByte()
+            reserved2: reader.ReadByte(),
+            xSampling: reader.ReadInt(),
+            ySampling: reader.ReadInt()
         );
 
         bytesRead = reader.Position - start;
         return true;
+    }
+
+    private void UpdateSorting()
+    {
+        channels.Sort((a, b) => a.Name.CompareTo(b.Name));
     }
 
     public IEnumerator<Channel> GetEnumerator()
