@@ -1,5 +1,4 @@
 ﻿using System.Buffers;
-using System.Reflection.PortableExecutable;
 
 namespace Jither.OpenEXR;
 
@@ -9,12 +8,10 @@ public class EXRPartDataReader : EXRPartDataHandler
 
     private readonly EXRReader reader;
     private readonly long offsetTableOffset;
-    private readonly int offsetTableSize;
+    private readonly int chunkCount;
     private readonly bool isMultiPart;
 
-    private int blockIndex = 0;
-
-    // Type = header.Type ?? (isSinglePartTiled ? PartType.TiledImage : PartType.ScanLineImage)
+    private int chunkIndex = 0;
 
     private OffsetTable OffsetTable
     {
@@ -26,7 +23,7 @@ public class EXRPartDataReader : EXRPartDataHandler
             }
 
             reader.Seek(offsetTableOffset);
-            _offsets = OffsetTable.ReadFrom(reader, offsetTableSize);
+            _offsets = OffsetTable.ReadFrom(reader, chunkCount);
             return _offsets;
         }
     }
@@ -35,10 +32,11 @@ public class EXRPartDataReader : EXRPartDataHandler
     {
         this.reader = reader;
         this.offsetTableOffset = reader.Position;
+        this.isMultiPart = version.IsMultiPart;
 
-        if (version.IsMultiPart)
+        if (isMultiPart)
         {
-            offsetTableSize = part.GetAttributeOrThrow<int>("chunkCount");
+            chunkCount = part.GetAttributeOrThrow<int>("chunkCount");
         }
         else if (version.IsSinglePartTiled)
         {
@@ -47,16 +45,34 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
         else
         {
-            offsetTableSize = (int)Math.Ceiling((double)part.DataWindow.Height / compressor.ScanLinesPerBlock);
+            chunkCount = (int)Math.Ceiling((double)part.DataWindow.Height / compressor.ScanLinesPerBlock);
         }
     }
 
-    public void ReadBlock(byte[] dest)
+    public void ReadBlock(byte[] dest, int index = 0)
     {
-        InternalReadBlock(dest);
+        InternalReadBlock(dest, index);
     }
 
-    public void ReadBlockInterleaved(byte[] dest, IEnumerable<string> channelOrder)
+    public void Read(byte[] dest)
+    {
+        if (dest == null)
+        {
+            throw new ArgumentNullException(nameof(dest));
+        }
+        if (dest.Length < TotalBytes)
+        {
+            throw new ArgumentException($"Destination array too small ({dest.Length}) to fit pixel data ({TotalBytes})");
+        }
+        int destIndex = 0;
+        for (int i = 0; i < chunkCount; i++)
+        {
+            int bytesRead = InternalReadBlock(dest, destIndex);
+            destIndex += bytesRead;
+        }
+    }
+
+    public void ReadBlockInterleaved(byte[] dest, IEnumerable<string> channelOrder, int index = 0)
     {
         // Offsets are always ordered with scanlines from top to bottom (INCREASING_Y). However, the order of the scanlines themselves within the file
         // may be bottom to top or random (see LineOrder). Each block stores its first scanline's y coordinate, meaning it's possible to
@@ -70,7 +86,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         var data = ArrayPool<byte>.Shared.Rent(outputByteCount);
         try
         {
-            InternalReadBlock(data);
+            InternalReadBlock(data, index);
 
             // The decompressed pixel data is stored with channels separated and ordered alphabetically
             int sourceIndex = 0;
@@ -106,20 +122,24 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
     }
 
-    private void InternalReadBlock(byte[] dest)
+    private int InternalReadBlock(byte[] dest, int index)
     {
-        var offset = OffsetTable[blockIndex];
+        var offset = OffsetTable[chunkIndex];
         reader.Seek((long)offset);
         int partNumber = isMultiPart ? reader.ReadInt() : 0;
         int y = reader.ReadInt();
         int pixelDataSize = reader.ReadInt();
 
         var chunkStream = reader.GetChunkStream(pixelDataSize);
-        using (var destStream = new MemoryStream(dest))
+        int bytesRead = 0;
+        using (var destStream = new MemoryStream(dest, index, BytesPerBlock))
         {
             compressor.Decompress(chunkStream, destStream);
+            bytesRead = (int)destStream.Position;
         }
 
-        blockIndex++;
+        chunkIndex++;
+
+        return bytesRead;
     }
 }

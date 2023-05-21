@@ -31,7 +31,8 @@ public abstract class EXRAttribute
         V3i => "v3i",
         V3f => "v3f",
         ChannelList => "chlist",
-        byte[] => "preview",
+        Preview => "preview",
+        UnknownValue uv => uv.Type,
         _ => throw new NotImplementedException($"Type name for {UntypedValue?.GetType()} not implemented.")
     };
 
@@ -177,8 +178,9 @@ public abstract class EXRAttribute
                     throw new EXRFormatException($"Failed reading channel list '{name}'.", ex);
                 }
             case "preview":
+                return new EXRAttribute<Preview>(name, new Preview(reader.ReadUInt(), reader.ReadUInt(), reader.ReadBytes(size - 8)));
             default:
-                return new EXRAttribute<byte[]>(name, reader.ReadBytes(size));
+                return new EXRAttribute<UnknownValue>(name, new UnknownValue(type, reader.ReadBytes(size)));
         }
     }
 }
@@ -333,9 +335,15 @@ public class EXRAttribute<T> : EXRAttribute
             case ChannelList chlist:
                 chlist.WriteTo(writer);
                 break;
-            case byte[] bytes:
-                WriteSize(bytes.Length);
-                writer.WriteBytes(bytes);
+            case Preview preview:
+                WriteSize(preview.RGBAData.Length + 8);
+                writer.WriteUInt(preview.Width);
+                writer.WriteUInt(preview.Height);
+                writer.WriteBytes(preview.RGBAData);
+                break;
+            case UnknownValue unknown:
+                WriteSize(unknown.Bytes.Length);
+                writer.WriteBytes(unknown.Bytes);
                 break;
             default:
                 throw new NotImplementedException($"Writing of attribute {Name} (type: {Type}) not implemented.");

@@ -6,34 +6,46 @@ public class EXRPartDataWriter : EXRPartDataHandler
 {
     private readonly EXRWriter writer;
     private readonly long offsetTableOffset;
-    private readonly int offsetTableSize;
-    private int blockIndex = 0;
+    private readonly int chunkCount;
+    private readonly bool isMultiPart;
+    private int chunkIndex = 0;
 
-    internal EXRPartDataWriter(EXRPart part, EXRWriter writer) : base(part)
+    internal EXRPartDataWriter(EXRPart part, EXRVersion version, EXRWriter writer) : base(part)
     {
         this.writer = writer;
+        this.isMultiPart = version.IsMultiPart;
         offsetTableOffset = writer.Position;
-        offsetTableSize = (int)Math.Ceiling((double)part.DataWindow.Height / compressor.ScanLinesPerBlock);
+        chunkCount = (int)Math.Ceiling((double)part.DataWindow.Height / compressor.ScanLinesPerBlock);
     }
 
     public void WriteOffsetPlaceholders()
     {
-        for (int i = 0; i < offsetTableSize; i++)
+        for (int i = 0; i < chunkCount; i++)
         {
             writer.WriteULong(0xffffffffffffffffUL);
         }
     }
 
-    public void WriteBlock(byte[] data, int count = 0)
+    public void WriteBlock(byte[] data, int index = 0)
     {
-        count = CheckWriteCount(data, count);
-        InternalWriteBlock(writer, data, count);
+        CheckWriteCount(data, index);
+        InternalWriteBlock(data, index);
     }
 
-    public void WriteBlockInterleaved(byte[] data, IEnumerable<string> channelOrder, int count = 0)
+    public void Write(byte[] data)
     {
-        count = CheckWriteCount(data, count);
-        var pixelData = ArrayPool<byte>.Shared.Rent(count);
+        int sourceIndex = 0;
+        for (int i = 0; i < chunkCount; i++)
+        {
+            int bytesWritten = InternalWriteBlock(data, sourceIndex);
+            sourceIndex += bytesWritten;
+        }
+    }
+
+    public void WriteBlockInterleaved(byte[] data, IEnumerable<string> channelOrder, int index = 0)
+    {
+        CheckWriteCount(data, index);
+        var pixelData = ArrayPool<byte>.Shared.Rent(BytesPerBlock);
         try
         {
             // Rearrange block from interleaved channels into consecutive channels
@@ -56,7 +68,7 @@ public class EXRPartDataWriter : EXRPartDataHandler
                 }
             }
 
-            InternalWriteBlock(writer, data, count);
+            InternalWriteBlock(data, index);
         }
         finally
         {
@@ -64,46 +76,44 @@ public class EXRPartDataWriter : EXRPartDataHandler
         }
     }
 
-    private void InternalWriteBlock(EXRWriter writer, byte[] data, int count)
+    private int InternalWriteBlock(byte[] data, int index)
     {
         // TODO: We're assuming INCREASING_Y when writing
         ulong blockOffset = (ulong)writer.Position;
 
-        writer.WriteInt(blockIndex);
-        writer.WriteInt(blockIndex * compressor.ScanLinesPerBlock); // y
+        if (isMultiPart)
+        {
+            writer.WriteInt(chunkIndex);
+        }
+        writer.WriteInt(chunkIndex * compressor.ScanLinesPerBlock); // y
         long sizeOffset = writer.Position;
         writer.WriteInt(0); // Placeholder
         var dest = writer.GetStream();
-        using (var source = new MemoryStream(data, 0, count))
+        int bytesToWrite = chunkIndex < chunkCount - 1 ? BytesPerBlock : Math.Min(BytesPerBlock, BytesInLastBlock);
+        using (var source = new MemoryStream(data, index, bytesToWrite))
         {
             compressor.Compress(source, dest);
         }
         
-        var size = (int)(writer.Position - sizeOffset);
+        var size = (int)(writer.Position - sizeOffset - 4);
         writer.Seek(sizeOffset);
         writer.WriteInt(size);
 
-        writer.Seek(offsetTableOffset + blockIndex * 8);
-        writer.WriteULong((ulong)blockOffset);
+        writer.Seek(offsetTableOffset + chunkIndex * 8);
+        writer.WriteULong(blockOffset);
 
         writer.Seek(0, SeekOrigin.End);
-        blockIndex++;
+        chunkIndex++;
+
+        return bytesToWrite;
     }
 
-    private int CheckWriteCount(byte[] data, int count)
+    private void CheckWriteCount(byte[] data, int index)
     {
-        if (count == 0)
+        int count = data.Length - index;
+        if (count < BytesPerBlock)
         {
-            count = data.Length;
+            throw new ArgumentException($"Expected block to write to be {BytesPerBlock} bytes, but got array (+ index) with {count} bytes", nameof(data));
         }
-        if (count > data.Length)
-        {
-            throw new ArgumentException($"Specified number of bytes to write ({count}) exceeds the size of the data ({data.Length})");
-        }
-        if (count != BytesPerBlock)
-        {
-            throw new ArgumentException($"Expected block to write to be {BytesPerBlock} bytes, but got {count}", nameof(count));
-        }
-        return count;
     }
 }

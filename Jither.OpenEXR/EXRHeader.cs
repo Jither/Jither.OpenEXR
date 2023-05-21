@@ -21,44 +21,49 @@ public class EXRHeader
 
     public bool IsEmpty => attributes.Count == 0;
 
-    /// <summary>
-    /// Description of the image channels stored in the part.
-    /// </summary>
     public ChannelList Channels => GetAttributeOrThrow<ChannelList>("channels");
 
-    /// <summary>
-    /// Specifies the compression method applied to the pixel data of all channels in the part.
-    /// </summary>
-    public EXRCompression Compression => GetAttributeOrThrow<EXRCompression>("compression");
+    public EXRCompression Compression
+    {
+        get => GetAttributeOrThrow<EXRCompression>("compression");
+        set => SetAttribute(new EXRAttribute<EXRCompression>("compression", value));
+    }
 
+    public Box2i DataWindow
+    {
+        get => GetAttributeOrThrow<Box2i>("dataWindow");
+        set => SetAttribute(new EXRAttribute<Box2i>("dataWindow", value));
+    }
 
-    public Box2i DataWindow => GetAttributeOrThrow<Box2i>("dataWindow");
-    public Box2i DisplayWindow => GetAttributeOrThrow<Box2i>("displayWindow");
+    public Box2i DisplayWindow
+    {
+        get => GetAttributeOrThrow<Box2i>("displayWindow");
+        set => SetAttribute(new EXRAttribute<Box2i>("displayWindow", value));
+    }
 
-    /// <summary>
-    /// Specifies in what order the scan lines in the file are stored in the file (increasing Y, decreasing Y, or, for tiled images, also random Y).
-    /// </summary>
-    public LineOrder LineOrder => GetAttributeOrThrow<LineOrder>("lineOrder");
+    public LineOrder LineOrder
+    {
+        get => GetAttributeOrThrow<LineOrder>("lineOrder");
+        set => SetAttribute(new EXRAttribute<LineOrder>("lineOrder", value));
+    }
 
-    /// <summary>
-    /// Width divided by height of a pixel when the image is displayed with the correct aspect ratio.
-    /// A pixel’s width (height) is the distance between the centers of two horizontally (vertically) adjacent pixels on the display.
-    /// </summary>
-    public float PixelAspectRatio => GetAttributeOrThrow<float>("pixelAspectRatio");
+    public float PixelAspectRatio
+    {
+        get => GetAttributeOrThrow<float>("pixelAspectRatio");
+        set => SetAttribute(new EXRAttribute<float>("pixelAspectRatio", value));
+    }
 
-    /// <summary>
-    /// With <seealso cref="ScreenWindowWidth"/> describes the perspective projection that produced the image. Programs that deal with images as purely
-    /// two-dimensional objects may not be able so generate a description of a perspective projection. Those programs should set screenWindowWidth to 1,
-    /// and screenWindowCenter to (0, 0).
-    /// </summary>
-    public V2f ScreenWindowCenter => GetAttributeOrThrow<V2f>("screenWindowCenter");
+    public V2f ScreenWindowCenter
+    {
+        get => GetAttributeOrThrow<V2f>("screenWindowCenter");
+        set => SetAttribute(new EXRAttribute<V2f>("screenWindowCenter", value));
+    }
 
-    /// <summary>
-    /// With <seealso cref="ScreenWindowCenter"/> describes the perspective projection that produced the image. Programs that deal with images as purely
-    /// two-dimensional objects may not be able so generate a description of a perspective projection. Those programs should set screenWindowWidth to 1,
-    /// and screenWindowCenter to (0, 0).
-    /// </summary>
-    public float ScreenWindowWidth => GetAttributeOrThrow<float>("screenWindowWidth");
+    public float ScreenWindowWidth
+    {
+        get => GetAttributeOrThrow<float>("screenWindowWidth");
+        set => SetAttribute(new EXRAttribute<float>("screenWindowWidth", value));
+    }
 
     /// <summary>
     /// Determines the size of the tiles and the number of resolution levels in the file.
@@ -81,11 +86,21 @@ public class EXRHeader
     /// </summary>
     public string? View => GetAttributeOrDefault<string>("view");
 
-    /// <summary>
-    /// The name attribute defines the name of each part. The name of each part must be unique. Names may contain ‘.’ characters to present a tree-like structure of the parts in a file.
-    /// Required if the file is either MultiPart or NonImage.
-    /// </summary>
-    public string? Name => GetAttributeOrDefault<string>("name");
+    public string? Name
+    {
+        get => GetAttributeOrDefault<string>("name");
+        set
+        {
+            if (value == null)
+            {
+                RemoveAttribute("name");
+            }
+            else
+            {
+                SetAttribute(new EXRAttribute<string>("name", value));
+            }
+        }
+    }
 
     /// <summary>
     /// Data types are defined by the type attribute. There are four types:
@@ -156,6 +171,12 @@ public class EXRHeader
         }
         attributes.Add(attribute);
         attributesByName[attribute.Name] = attribute;
+    }
+
+    public void RemoveAttribute(string name)
+    {
+        attributes.RemoveAll(a => a.Name == name);
+        attributesByName.Remove(name);
     }
 
     public T GetAttributeOrThrow<T>(string name)

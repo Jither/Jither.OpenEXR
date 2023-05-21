@@ -1,5 +1,4 @@
 ﻿using System.Diagnostics;
-using System.Net.Http.Headers;
 
 namespace Jither.OpenEXR;
 
@@ -8,13 +7,32 @@ public class EXRFile : IDisposable
     private readonly List<EXRPart> parts = new();
     private readonly Dictionary<string, EXRPart> partsByName = new();
     private EXRReader? reader;
+    private EXRWriter? writer;
 
     public IReadOnlyDictionary<string, EXRPart> PartsByName => partsByName;
     public IReadOnlyList<EXRPart> Parts => parts;
 
     public IEnumerable<string?> PartNames => parts.Select(p => p.Name);
 
+    public EXRPartDataReaderList DataReaders { get; } = new();
+    public EXRPartDataWriterList DataWriters { get; } = new();
+
+    /// <summary>
+    /// Forces the OpenEXR version to 2 when writing this file, regardless of whether it uses version 2 features.
+    /// </summary>
+    public bool ForceVersion2 { get; set; }
+
     public EXRFile()
+    {
+
+    }
+
+    public EXRFile(string path) : this(new FileStream(path, FileMode.Open, FileAccess.Read))
+    {
+
+    }
+
+    public EXRFile(Stream stream) : this(new EXRReader(stream))
     {
 
     }
@@ -22,77 +40,19 @@ public class EXRFile : IDisposable
     private EXRFile(EXRReader reader)
     {
         this.reader = reader;
+        ReadHeaders(reader);
     }
 
-    public static EXRFile FromFile(string path)
+    public void Write(string path)
     {
-        return FromStream(new FileStream(path, FileMode.Open, FileAccess.Read));
+        Write(new FileStream(path, FileMode.Create, FileAccess.Write));
     }
 
-    public static EXRFile FromStream(Stream stream)
-    {
-        var reader = new EXRReader(stream);
-        var result = FromReader(reader);
-        return result;
-    }
-
-    private static EXRFile FromReader(EXRReader reader)
-    {
-        var result = new EXRFile(reader);
-        result.ReadHeaders(reader);
-        return result;
-    }
-
-    public void SaveAs(string path)
-    {
-        SaveAs(new FileStream(path, FileMode.Create, FileAccess.Write));
-    }
-
-    public void SaveAs(Stream stream)
+    public void Write(Stream stream)
     {
         var version = DetermineVersion();
-        using (var writer = new EXRWriter(stream, version.MaxNameLength))
-        {
-            WriteHeaders(writer, version);
-        }
-    }
-
-    private void ReadHeaders(EXRReader reader)
-    {
-        var magicNumber = reader.ReadInt();
-        if (magicNumber != 20000630)
-        {
-            throw new EXRFormatException("Magic number not found.");
-        }
-
-        var version = EXRVersion.ReadFrom(reader);
-
-        var headers = new List<EXRHeader>();
-
-        if (version.IsMultiPart)
-        {
-            while (true)
-            {
-                var header = EXRHeader.ReadFrom(reader, version.MaxNameLength);
-                if (header.IsEmpty)
-                {
-                    break;
-                }
-                headers.Add(header);
-            }
-        }
-        else
-        {
-            var header = EXRHeader.ReadFrom(reader, version.MaxNameLength);
-            headers.Add(header);
-        }
-
-        foreach (var header in headers)
-        {
-            var part = new EXRPart(header);
-            part.DataReader = new EXRPartDataReader(part, version, reader);
-            AddPart(part);
-        }
+        writer = new EXRWriter(stream, version.MaxNameLength);
+        WriteHeaders(writer, version);
     }
 
     public void AddPart(EXRPart part)
@@ -131,6 +91,45 @@ public class EXRFile : IDisposable
         }
     }
 
+    private void ReadHeaders(EXRReader reader)
+    {
+        var magicNumber = reader.ReadInt();
+        if (magicNumber != 20000630)
+        {
+            throw new EXRFormatException("Magic number not found.");
+        }
+
+        var version = EXRVersion.ReadFrom(reader);
+
+        var headers = new List<EXRHeader>();
+
+        if (version.IsMultiPart)
+        {
+            while (true)
+            {
+                var header = EXRHeader.ReadFrom(reader, version.MaxNameLength);
+                if (header.IsEmpty)
+                {
+                    break;
+                }
+                headers.Add(header);
+            }
+        }
+        else
+        {
+            var header = EXRHeader.ReadFrom(reader, version.MaxNameLength);
+            headers.Add(header);
+        }
+
+        foreach (var header in headers)
+        {
+            var part = new EXRPart(header);
+            var dataReader = new EXRPartDataReader(part, version, reader);
+            DataReaders.Add(part.Name, dataReader);
+            AddPart(part);
+        }
+    }
+
     private void WriteHeaders(EXRWriter writer, EXRVersion version)
     {
         Validate();
@@ -151,8 +150,9 @@ public class EXRFile : IDisposable
 
         foreach (var part in parts)
         {
-            part.DataWriter = new EXRPartDataWriter(part, writer);
-            part.DataWriter.WriteOffsetPlaceholders();
+            var dataWriter = new EXRPartDataWriter(part, version, writer);
+            dataWriter.WriteOffsetPlaceholders();
+            DataWriters.Add(part.Name, dataWriter);
         }
     }
 
@@ -182,6 +182,11 @@ public class EXRFile : IDisposable
         if (parts.Any(p => p.HasLongNames))
         {
             flags |= EXRVersionFlags.LongNames;
+        }
+
+        if (ForceVersion2)
+        {
+            versionNumber = 2;
         }
 
         return new EXRVersion(versionNumber, flags);
@@ -216,6 +221,8 @@ public class EXRFile : IDisposable
         }
         if (disposing)
         {
+            writer?.Dispose();
+            writer = null;
             reader?.Dispose();
             reader = null;
         }

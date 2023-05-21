@@ -9,7 +9,19 @@ public abstract class EXRPartDataHandler
     protected int PixelsPerBlock => compressor.ScanLinesPerBlock * part.DataWindow.Width;
     protected int BytesPerPixel => part.Channels.Sum(c => c.Type.GetBytesPerPixel());
     protected int BitsPerPixel => BytesPerPixel * 8;
-    protected int BytesPerBlock => BytesPerPixel * PixelsPerBlock;
+    public int BytesPerBlock => BytesPerPixel * PixelsPerBlock;
+    public int BytesInLastBlock {
+        get
+        {
+            int scanlines = part.DataWindow.Height % compressor.ScanLinesPerBlock;
+            if (scanlines == 0)
+            {
+                scanlines = compressor.ScanLinesPerBlock;
+            }
+            return part.DataWindow.Width * scanlines * BytesPerPixel;
+        }
+    }
+    public int TotalBytes => part.DataWindow.Width * part.DataWindow.Height * BytesPerPixel;
 
     protected EXRPartDataHandler(EXRPart part)
     {
@@ -18,9 +30,9 @@ public abstract class EXRPartDataHandler
         {
             EXRCompression.None => new NullCompressor(),
             EXRCompression.RLE => new RLECompressor(),
-            EXRCompression.ZipS => new ZipSCompressor(),
-            EXRCompression.Zip => new ZipCompressor(),
-            EXRCompression.Piz => new PizCompressor(),
+            EXRCompression.ZIPS => new ZipSCompressor(),
+            EXRCompression.ZIP => new ZipCompressor(),
+            EXRCompression.PIZ => new PizCompressor(),
             _ => throw new NotSupportedException($"{part.Compression} compression not supported")
         };
     }
