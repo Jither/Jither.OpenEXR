@@ -76,7 +76,7 @@ public abstract class Compressor
                 byte current = temp[t1];
                 int d = (sbyte)(current - previous + 128 + 256);
                 previous = current;
-                buffer[t1++] = unchecked((byte)d);
+                buffer[t1++] = (byte)d;
             }
         }
         finally

@@ -55,7 +55,7 @@ public class RLECompressor : Compressor
                         runLength++;
                         rune++;
                     }
-                    dest.WriteByte(unchecked((byte)-runLength));
+                    dest.WriteByte((byte)(-runLength));
                     int count = rune - runs;
                     dest.Write(buffer, runs, count);
                     runs += count;
@@ -85,7 +85,7 @@ public class RLECompressor : Compressor
                     // End of stream
                     break;
                 }
-                int runCount = unchecked((sbyte)b);
+                int runCount = (sbyte)b;
                 if (runCount < 0)
                 {
                     runCount = -runCount;
