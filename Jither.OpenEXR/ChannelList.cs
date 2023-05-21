@@ -86,7 +86,7 @@ public class ChannelList : IReadOnlyList<Channel>
 
         channel = new Channel(
             name, 
-            (PixelType)reader.ReadInt(),
+            (EXRDataType)reader.ReadInt(),
             linear: reader.ReadByte() != 0,
             xSampling: reader.ReadInt(),
             ySampling: reader.ReadInt(),

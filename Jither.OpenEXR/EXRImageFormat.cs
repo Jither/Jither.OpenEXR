@@ -23,19 +23,19 @@ public static class EXRImageSourceFormatExtensions
         return format.HasFlag(EXRImageSourceFormat.HasAlpha);
     }
 
-    public static PixelType GetPixelType(this EXRImageSourceFormat format)
+    public static EXRDataType GetPixelType(this EXRImageSourceFormat format)
     {
         if (format.HasFlag(EXRImageSourceFormat.Float))
         {
-            return PixelType.Float;
+            return EXRDataType.Float;
         }
         if (format.HasFlag(EXRImageSourceFormat.Half))
         {
-            return PixelType.Half;
+            return EXRDataType.Half;
         }
         if (format.HasFlag(EXRImageSourceFormat.UInt))
         {
-            return PixelType.UInt;
+            return EXRDataType.UInt;
         }
 
         throw new EXRFormatException($"Unknown source format: {format}");

@@ -21,48 +21,48 @@ public class EXRHeader
 
     public bool IsEmpty => attributes.Count == 0;
 
-    public ChannelList Channels => GetAttributeOrThrow<ChannelList>("channels");
+    public ChannelList Channels => GetAttributeOrThrow<ChannelList>(AttributeNames.Channels);
 
     public EXRCompression Compression
     {
-        get => GetAttributeOrThrow<EXRCompression>("compression");
-        set => SetAttribute(new EXRAttribute<EXRCompression>("compression", value));
+        get => GetAttributeOrThrow<EXRCompression>(AttributeNames.Compression);
+        set => SetAttribute(new EXRAttribute<EXRCompression>(AttributeNames.Compression, value));
     }
 
     public Box2i DataWindow
     {
-        get => GetAttributeOrThrow<Box2i>("dataWindow");
-        set => SetAttribute(new EXRAttribute<Box2i>("dataWindow", value));
+        get => GetAttributeOrThrow<Box2i>(AttributeNames.DataWindow);
+        set => SetAttribute(new EXRAttribute<Box2i>(AttributeNames.DataWindow, value));
     }
 
     public Box2i DisplayWindow
     {
-        get => GetAttributeOrThrow<Box2i>("displayWindow");
-        set => SetAttribute(new EXRAttribute<Box2i>("displayWindow", value));
+        get => GetAttributeOrThrow<Box2i>(AttributeNames.DisplayWindow);
+        set => SetAttribute(new EXRAttribute<Box2i>(AttributeNames.DisplayWindow, value));
     }
 
     public LineOrder LineOrder
     {
-        get => GetAttributeOrThrow<LineOrder>("lineOrder");
-        set => SetAttribute(new EXRAttribute<LineOrder>("lineOrder", value));
+        get => GetAttributeOrThrow<LineOrder>(AttributeNames.LineOrder);
+        set => SetAttribute(new EXRAttribute<LineOrder>(AttributeNames.LineOrder, value));
     }
 
     public float PixelAspectRatio
     {
-        get => GetAttributeOrThrow<float>("pixelAspectRatio");
-        set => SetAttribute(new EXRAttribute<float>("pixelAspectRatio", value));
+        get => GetAttributeOrThrow<float>(AttributeNames.PixelAspectRatio);
+        set => SetAttribute(new EXRAttribute<float>(AttributeNames.PixelAspectRatio, value));
     }
 
     public V2f ScreenWindowCenter
     {
-        get => GetAttributeOrThrow<V2f>("screenWindowCenter");
-        set => SetAttribute(new EXRAttribute<V2f>("screenWindowCenter", value));
+        get => GetAttributeOrThrow<V2f>(AttributeNames.ScreenWindowCenter);
+        set => SetAttribute(new EXRAttribute<V2f>(AttributeNames.ScreenWindowCenter, value));
     }
 
     public float ScreenWindowWidth
     {
-        get => GetAttributeOrThrow<float>("screenWindowWidth");
-        set => SetAttribute(new EXRAttribute<float>("screenWindowWidth", value));
+        get => GetAttributeOrThrow<float>(AttributeNames.ScreenWindowWidth);
+        set => SetAttribute(new EXRAttribute<float>(AttributeNames.ScreenWindowWidth, value));
     }
 
     /// <summary>
@@ -72,7 +72,7 @@ public class EXRHeader
     /// The OpenEXR library ignores tile description attributes in scan line based files. The decision whether the file contains scan lines or tiles 
     /// is based on the value of bit 9 in the file’s version field, not on the presence of a tile description attribute.
     /// </remarks>
-    public TileDesc? Tiles => GetAttributeOrDefault<TileDesc>("tiles");
+    public TileDesc? Tiles => GetAttributeOrDefault<TileDesc>(AttributeNames.Tiles);
 
     /// <summary>
     /// Specifies the view this part is associated with (mostly used for files which stereo views).
@@ -84,20 +84,20 @@ public class EXRHeader
     /// 
     /// This attribute can be used in the header for multi-part files.
     /// </summary>
-    public string? View => GetAttributeOrDefault<string>("view");
+    public string? View => GetAttributeOrDefault<string>(AttributeNames.View);
 
     public string? Name
     {
-        get => GetAttributeOrDefault<string>("name");
+        get => GetAttributeOrDefault<string>(AttributeNames.Name);
         set
         {
             if (value == null)
             {
-                RemoveAttribute("name");
+                RemoveAttribute(AttributeNames.Name);
             }
             else
             {
-                SetAttribute(new EXRAttribute<string>("name", value));
+                SetAttribute(new EXRAttribute<string>(AttributeNames.Name, value));
             }
         }
     }
@@ -115,22 +115,22 @@ public class EXRHeader
     /// <remarks>
     /// This value must agree with the version field’s tile bit (9) and non-image (deep data) bit (11) settings.
     /// </remarks>
-    public PartType? Type => GetAttributeOrDefault<PartType>("type");
+    public PartType? Type => GetAttributeOrDefault<PartType>(AttributeNames.Type);
 
     /// <summary>
     /// Version is required for deep data (deepscanline and deeptile) parts. If not specified for other parts, 1 is assumed.
     /// </summary>
-    public int Version => GetAttributeOrDefault<int?>("version") ?? 1;
+    public int Version => GetAttributeOrDefault<int?>(AttributeNames.Version) ?? 1;
 
     /// <summary>
     /// Indicates the number of chunks in this part. Required if the multipart bit (12) is set.
     /// </summary>
-    public int ChunkCount => GetAttributeOrDefault<int?>("chunkCount") ?? 1;
+    public int ChunkCount => GetAttributeOrDefault<int?>(AttributeNames.ChunkCount) ?? 1;
 
     /// <summary>
     /// For RGB images, specifies the CIE (x,y) chromaticities of the primaries and the white point.
     /// </summary>
-    public Chromaticities Chromaticities => GetAttributeOrDefault<Chromaticities>("chromaticities") ?? DefaultChromaticities;
+    public Chromaticities Chromaticities => GetAttributeOrDefault<Chromaticities>(AttributeNames.Chromaticities) ?? DefaultChromaticities;
 
     public EXRHeader()
     {
