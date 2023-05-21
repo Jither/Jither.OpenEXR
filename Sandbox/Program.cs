@@ -1,4 +1,5 @@
 ﻿using Jither.OpenEXR;
+using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -12,10 +13,12 @@ internal class Program
         {
             Console.WriteLine(JsonSerializer.Serialize(file, new JsonSerializerOptions { WriteIndented = true, Converters = { new JsonStringEnumConverter() } }));
             var partsData = new List<byte[]>();
-            foreach (var part in file.DataReaders)
+            foreach (var part in file.Parts)
             {
-                var bytes = new byte[part.TotalBytes];
-                part.Read(bytes);
+                Debug.Assert(part.DataReader != null);
+
+                var bytes = new byte[part.DataReader.TotalBytes];
+                part.DataReader.Read(bytes);
                 partsData.Add(bytes);
             }
             
@@ -24,9 +27,11 @@ internal class Program
             
             file.Write(@"D:\test-rle.exr");
             int partIndex = 0;
-            foreach (var part in file.DataWriters)
+            foreach (var part in file.Parts)
             {
-                part.Write(partsData[partIndex++]);
+                Debug.Assert(part.DataWriter != null);
+
+                part.DataWriter.Write(partsData[partIndex++]);
             }
         }
     }

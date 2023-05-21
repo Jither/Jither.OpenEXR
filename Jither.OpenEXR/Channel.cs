@@ -22,7 +22,12 @@ public class Channel
     /// </summary>
     public EXRDataType Type { get; set; }
 
-    public bool Linear { get; set; }
+    /// <summary>
+    /// OpenEXR source docs: "Hint for lossy compression methods about how to treat values (logarithmic or linear), meaning a human sees values like R, G, B, luminance difference
+    /// between 0.1 and 0.2 as about the same as 1.0 to 2.0 (logarithmic), where chroma coordinates are closer to linear
+    /// (0.1 and 0.2 is about the same difference as 1.0 and 1.1)."
+    /// </summary>
+    public PerceptualTreatment PerceptualTreatment { get; set; }
 
     /// <summary>
     /// The channel's x sampling rate. Determines for which of the pixels in the image’s data window data are stored in the file. Data for a pixel at pixel space coordinates (x, y)
@@ -46,15 +51,20 @@ public class Channel
     public byte Reserved1 { get; set; }
     public byte Reserved2 { get; set; }
 
-    public Channel(string name, EXRDataType type, bool linear, int xSampling, int ySampling, byte reserved0 = 0, byte reserved1 = 0, byte reserved2 = 0)
+    public Channel(string name, EXRDataType type, PerceptualTreatment perceptualTreatment, int xSampling, int ySampling, byte reserved0 = 0, byte reserved1 = 0, byte reserved2 = 0)
     {
         Name = name;
         Type = type;
-        Linear = linear;
+        PerceptualTreatment = perceptualTreatment;
         XSampling = xSampling;
         YSampling = ySampling;
         Reserved0 = reserved0;
         Reserved1 = reserved1;
         Reserved2 = reserved2;
+    }
+
+    public override string ToString()
+    {
+        return $"{Name}:{Type} ({PerceptualTreatment}, Sx = {XSampling}, Sy = {YSampling})";
     }
 }

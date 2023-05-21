@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Jither.OpenEXR;
 
@@ -9,29 +10,51 @@ public class EXRFile : IDisposable
     private EXRReader? reader;
     private EXRWriter? writer;
 
-    public IReadOnlyDictionary<string, EXRPart> PartsByName => partsByName;
+    /// <summary>
+    /// List of parts contained in the file, in the order their headers appear in the file.
+    /// </summary>
     public IReadOnlyList<EXRPart> Parts => parts;
 
+    /// <summary>
+    /// List of part names in the order they appear in the file. Note that any unnamed single part will not appear in this list.
+    /// </summary>
     public IEnumerable<string?> PartNames => parts.Select(p => p.Name);
 
-    public EXRPartDataReaderList DataReaders { get; } = new();
-    public EXRPartDataWriterList DataWriters { get; } = new();
+    /// <summary>
+    /// Parts contained in the file, indexed by name. Note that any unnamed single part will not appear here.
+    /// </summary>
+    public IReadOnlyDictionary<string, EXRPart> PartsByName => partsByName;
 
     /// <summary>
-    /// Forces the OpenEXR version to 2 when writing this file, regardless of whether it uses version 2 features.
+    /// Forces the OpenEXR version to 2 when writing this file, regardless of whether it uses version 2 features. True by default, since
+    /// commonly used applications like DJV do not support version 1.
     /// </summary>
-    public bool ForceVersion2 { get; set; }
+    public bool ForceVersion2 { get; set; } = true;
+
+    /// <summary>
+    /// File version information for files read from file or stream.
+    /// This will be <c>null</c> for files that have not been read from an external source (i.e. files created from scratch).
+    /// </summary>
+    public EXRVersion? OriginalVersion { get; private set; }
 
     public EXRFile()
     {
 
     }
 
+    /// <summary>
+    /// Opens an existing OpenEXR file for reading. File and part headers will be read and available after construction.
+    /// Use <see cref="EXRPart.DataReader"/> to read the pixel data of a part.
+    /// </summary>
     public EXRFile(string path) : this(new FileStream(path, FileMode.Open, FileAccess.Read))
     {
 
     }
 
+    /// <summary>
+    /// Opens a OpenEXR file from a stream for reading. File and part headers will be read and available after construction.
+    /// Use <see cref="EXRPart.DataReader"/> to read the pixel data of a part.
+    /// </summary>
     public EXRFile(Stream stream) : this(new EXRReader(stream))
     {
 
@@ -43,18 +66,29 @@ public class EXRFile : IDisposable
         ReadHeaders(reader);
     }
 
+    /// <summary>
+    /// Writes OpenEXR header and part headers to the given file path, overwriting any existing file at that path.
+    /// Use <see cref="EXRPart.DataWriter"/> of the file's parts to write the pixel data.
+    /// </summary>
     public void Write(string path)
     {
         Write(new FileStream(path, FileMode.Create, FileAccess.Write));
     }
 
+    /// <summary>
+    /// Writes OpenEXR header and part headers to a stream.
+    /// Use <see cref="EXRPart.DataWriter"/> of the file's parts to write the pixel data.
+    /// </summary>
     public void Write(Stream stream)
     {
-        var version = DetermineVersion();
+        var version = DetermineVersionForWriting();
         writer = new EXRWriter(stream, version.MaxNameLength);
         WriteHeaders(writer, version);
     }
 
+    /// <summary>
+    /// Adds a part to the file.
+    /// </summary>
     public void AddPart(EXRPart part)
     {
         if (part.Name != null)
@@ -78,6 +112,9 @@ public class EXRFile : IDisposable
         }
     }
 
+    /// <summary>
+    /// Removes any path with the given name from the file. Note that <c>null</c> may be passed to delete any unnamed single part.
+    /// </summary>
     public void RemovePart(string name)
     {
         if (name == null)
@@ -99,7 +136,7 @@ public class EXRFile : IDisposable
             throw new EXRFormatException("Magic number not found.");
         }
 
-        var version = EXRVersion.ReadFrom(reader);
+        var version = OriginalVersion = EXRVersion.ReadFrom(reader);
 
         var headers = new List<EXRHeader>();
 
@@ -125,7 +162,7 @@ public class EXRFile : IDisposable
         {
             var part = new EXRPart(header);
             var dataReader = new EXRPartDataReader(part, version, reader);
-            DataReaders.Add(part.Name, dataReader);
+            part.AssignDataReader(dataReader);
             AddPart(part);
         }
     }
@@ -152,11 +189,11 @@ public class EXRFile : IDisposable
         {
             var dataWriter = new EXRPartDataWriter(part, version, writer);
             dataWriter.WriteOffsetPlaceholders();
-            DataWriters.Add(part.Name, dataWriter);
+            part.AssignDataWriter(dataWriter);
         }
     }
 
-    private EXRVersion DetermineVersion()
+    private EXRVersion DetermineVersionForWriting()
     {
         byte versionNumber = 1;
         EXRVersionFlags flags = EXRVersionFlags.None;
@@ -192,6 +229,11 @@ public class EXRFile : IDisposable
         return new EXRVersion(versionNumber, flags);
     }
 
+    /// <summary>
+    /// Does rudimentary validation of the setup of the file and its parts in preparation for writing.
+    /// This method is called by the library before writing files, and will throw <see cref="EXRFormatException"/>
+    /// in case of any issues.
+    /// </summary>
     public void Validate()
     {
         if (parts.Count == 0)
@@ -207,6 +249,17 @@ public class EXRFile : IDisposable
 
     private bool disposed;
 
+    /// <summary>
+    /// Closes the file. No further reading or writing can occur. Alias of <seealso cref="Dispose"/>
+    /// </summary>
+    public void Close()
+    {
+        Dispose();
+    }
+
+    /// <summary>
+    /// Closes the file. No further reading or writing can occur.
+    /// </summary>
     public void Dispose()
     {
         Dispose(true);

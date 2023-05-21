@@ -90,6 +90,13 @@ public static class AttributeNames
     public const string ChunkCount = "chunkCount";
 
     /// <summary>
+    /// Required for deep data (deepscanline and deeptile) parts. Note: Since the value of <c>maxSamplesPerPixel</c> maybe be unknown at the time of opening the file,
+    /// the value “-1” is written to the file to indicate an unknown value. When the file is closed, this will be overwritten with the correct value. If file writing
+    /// does not complete correctly due to an error, the value -1 will remain. In this case, the value must be derived by decoding each chunk in the part.
+    /// </summary>
+    public const string MaxSamplesPerPixel = "maxSamplesPerPixel";
+
+    /// <summary>
     /// Specifies the view this part is associated with (mostly used for files which stereo views).
     /// 
     /// * A value of left indicate the part is associated with the left eye.

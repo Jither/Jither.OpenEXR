@@ -5,7 +5,9 @@ VisualStudioVersion = 17.5.33516.290
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Jither.OpenEXR", "Jither.OpenEXR\Jither.OpenEXR.csproj", "{E5712AAC-BC61-4F4A-9670-818477BF8035}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Sandbox", "Sandbox\Sandbox.csproj", "{FDC997F5-3B38-4B1A-A3D9-7CC6EF0C8434}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sandbox", "Sandbox\Sandbox.csproj", "{FDC997F5-3B38-4B1A-A3D9-7CC6EF0C8434}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Examples", "Examples\Examples.csproj", "{46A0308C-C4A6-43EF-86DD-1D471867F941}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{FDC997F5-3B38-4B1A-A3D9-7CC6EF0C8434}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FDC997F5-3B38-4B1A-A3D9-7CC6EF0C8434}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FDC997F5-3B38-4B1A-A3D9-7CC6EF0C8434}.Release|Any CPU.Build.0 = Release|Any CPU
+		{46A0308C-C4A6-43EF-86DD-1D471867F941}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{46A0308C-C4A6-43EF-86DD-1D471867F941}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{46A0308C-C4A6-43EF-86DD-1D471867F941}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{46A0308C-C4A6-43EF-86DD-1D471867F941}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

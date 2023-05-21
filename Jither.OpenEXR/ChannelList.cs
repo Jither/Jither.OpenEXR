@@ -58,7 +58,7 @@ public class ChannelList : IReadOnlyList<Channel>
         {
             writer.WriteStringZ(channel.Name);
             writer.WriteInt((int)channel.Type);
-            writer.WriteByte(channel.Linear ? (byte)1 : (byte)0);
+            writer.WriteByte((byte)channel.PerceptualTreatment);
             writer.WriteInt(channel.XSampling);
             writer.WriteInt(channel.YSampling);
             writer.WriteByte(0);
@@ -82,7 +82,7 @@ public class ChannelList : IReadOnlyList<Channel>
         channel = new Channel(
             name, 
             (EXRDataType)reader.ReadInt(),
-            linear: reader.ReadByte() != 0,
+            perceptualTreatment: (PerceptualTreatment)reader.ReadByte(),
             xSampling: reader.ReadInt(),
             ySampling: reader.ReadInt(),
             reserved0: reader.ReadByte(),
@@ -102,5 +102,10 @@ public class ChannelList : IReadOnlyList<Channel>
     IEnumerator IEnumerable.GetEnumerator()
     {
         return GetEnumerator();
+    }
+
+    public override string ToString()
+    {
+        return String.Join("; ", channels);
     }
 }

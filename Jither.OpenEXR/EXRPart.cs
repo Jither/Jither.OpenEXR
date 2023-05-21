@@ -6,6 +6,8 @@ public class EXRPart
 {
     private readonly EXRHeader header;
 
+    public IReadOnlyList<EXRAttribute> Attributes => header.Attributes;
+
     /// <summary>
     /// Description of the image channels stored in the part.
     /// </summary>
@@ -87,7 +89,6 @@ public class EXRPart
     /// </summary>
     public string? Name => header.Name;
 
-
     public PartType? Type => header.Type;
 
     /// <summary>
@@ -100,7 +101,20 @@ public class EXRPart
     /// </summary>
     public bool HasAlpha => HasChannel("A");
 
+    /// <summary>
+    /// Indicates whether the part has a long (> 31 characters) name or any long attribute names or attribute types.
+    /// </summary>
     public bool HasLongNames => Name?.Length > 31 || header.Attributes.Any(attr => attr.Name.Length > 31 || attr.Type.Length > 31);
+
+    /// <summary>
+    /// Provides access to reading the data from the part. Will be null until the file headers have been read.
+    /// </summary>
+    public EXRPartDataReader? DataReader { get; private set; }
+
+    /// <summary>
+    /// Provides access to writing data for a part. Will be null unless <see cref="EXRFile.Write"/> has been called and headers have been written.
+    /// </summary>
+    public EXRPartDataWriter? DataWriter { get; private set; }
 
     internal EXRPart(EXRHeader header)
     {
@@ -150,6 +164,16 @@ public class EXRPart
     internal void WriteHeaderTo(EXRWriter writer)
     {
         header.WriteTo(writer);
+    }
+
+    internal void AssignDataReader(EXRPartDataReader reader)
+    {
+        this.DataReader = reader;
+    }
+
+    internal void AssignDataWriter(EXRPartDataWriter writer)
+    {
+        this.DataWriter = writer;
     }
 
     /// <summary>
