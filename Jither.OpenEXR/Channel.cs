@@ -21,6 +21,7 @@ public class Channel
     /// The channel's data type
     /// </summary>
     public EXRDataType Type { get; set; }
+
     public bool Linear { get; set; }
 
     /// <summary>
