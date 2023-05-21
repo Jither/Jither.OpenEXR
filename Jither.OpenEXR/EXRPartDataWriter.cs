@@ -106,7 +106,8 @@ public class EXRPartDataWriter : EXRPartDataHandler
         {
             writer.WriteInt(chunkIndex);
         }
-        writer.WriteInt(chunkIndex * compressor.ScanLinesPerBlock); // y
+        int y = chunkIndex * compressor.ScanLinesPerBlock + part.DataWindow.YMin;
+        writer.WriteInt(y);
         long sizeOffset = writer.Position;
         writer.WriteInt(0); // Placeholder
         var dest = writer.GetStream();

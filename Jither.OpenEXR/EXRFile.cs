@@ -172,7 +172,7 @@ public class EXRFile : IDisposable
 
     private void WriteHeaders(EXRWriter writer, EXRVersion version)
     {
-        Validate();
+        Validate(version);
 
         writer.WriteInt(20000630);
 
@@ -237,7 +237,7 @@ public class EXRFile : IDisposable
     /// This method is called by the library before writing files, and will throw <see cref="EXRFormatException"/>
     /// in case of any issues.
     /// </summary>
-    public void Validate()
+    public void Validate(EXRVersion version)
     {
         if (parts.Count == 0)
         {
@@ -247,6 +247,11 @@ public class EXRFile : IDisposable
         if (parts.Count > 1 && parts.Any(p => p.Name == null))
         {
             throw new EXRFormatException($"All parts in multipart file must have a name.");
+        }
+
+        foreach (var part in parts)
+        {
+            part.Validate(version.IsMultiPart, version.HasNonImageParts);
         }
     }
 

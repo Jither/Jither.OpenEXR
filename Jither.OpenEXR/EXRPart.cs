@@ -6,6 +6,23 @@ public class EXRPart
 {
     private readonly EXRHeader header;
 
+    public static readonly string[] RequiredAttributes = new[] {
+        AttributeNames.Channels,
+        AttributeNames.Compression,
+        AttributeNames.DataWindow,
+        AttributeNames.DisplayWindow,
+        AttributeNames.LineOrder,
+        AttributeNames.PixelAspectRatio,
+        AttributeNames.ScreenWindowCenter,
+        AttributeNames.ScreenWindowWidth
+    };
+
+    public static readonly string[] RequiredMultiPartAttributes = new[] {
+        AttributeNames.Name,
+        AttributeNames.Type,
+        AttributeNames.ChunkCount,
+    };
+
     public IReadOnlyList<EXRAttribute> Attributes => header.Attributes;
 
     /// <summary>
@@ -198,6 +215,61 @@ public class EXRPart
     internal void AssignDataWriter(EXRPartDataWriter writer)
     {
         this.DataWriter = writer;
+    }
+
+    /// <summary>
+    /// Does rudimentary validation of the part in preparation for writing.
+    /// This method is called by the library before writing files, and will throw <see cref="EXRFormatException"/>
+    /// in case of any issues.
+    /// </summary>
+    public void Validate(bool fileIsMultiPart, bool fileHasDeepData)
+    {
+        foreach (var requiredAttribute in RequiredAttributes)
+        {
+            if (!header.HasAttribute(requiredAttribute))
+            {
+                throw new EXRFormatException($"Part '{Name}' is missing required attribute '{requiredAttribute}'.");
+            }
+        }
+        
+        if (fileIsMultiPart || fileHasDeepData)
+        {
+            foreach (var requiredAttribute in RequiredMultiPartAttributes)
+            {
+                if (!header.HasAttribute(requiredAttribute))
+                {
+                    throw new EXRFormatException($"Part '{Name}' is missing '{requiredAttribute}' required for multi-part and deep data files.");
+                }
+            }
+        }
+
+        if (fileIsMultiPart)
+        {
+            if (!header.HasAttribute(AttributeNames.ChunkCount))
+            {
+                throw new EXRFormatException($"Part '{Name}' is missing '{AttributeNames.ChunkCount}' attribute required for multi-part files.");
+            }
+        }
+
+        if (Type == PartType.TiledImage || Type == PartType.DeepTiled)
+        {
+            if (!header.HasAttribute(AttributeNames.Tiles))
+            {
+                throw new EXRFormatException($"Part '{Name}' is missing '{AttributeNames.Tiles}' attribute required for tiled parts.");
+            }
+        }
+
+        if (Type == PartType.DeepScanLine || Type == PartType.DeepTiled)
+        {
+            if (!header.HasAttribute(AttributeNames.Version))
+            {
+                throw new EXRFormatException($"Part '{Name}' is missing '{AttributeNames.Version}' attribute required for deep data parts.");
+            }
+            if (!header.HasAttribute(AttributeNames.MaxSamplesPerPixel))
+            {
+                throw new EXRFormatException($"Part '{Name}' is missing '{AttributeNames.MaxSamplesPerPixel}' attribute required for deep data parts.");
+            }
+        }
     }
 
     /// <summary>

@@ -204,6 +204,11 @@ internal class EXRHeader
         return attribute;
     }
 
+    public bool HasAttribute(string name)
+    {
+        return attributesByName.ContainsKey(name);
+    }
+
     public bool TryGetAttribute<T>(string name, out T? result)
     {
         if (!attributesByName.TryGetValue(name, out var attr))

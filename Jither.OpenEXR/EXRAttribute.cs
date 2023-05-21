@@ -40,6 +40,7 @@ public abstract class EXRAttribute
 
     protected EXRAttribute(string name)
     {
+        if (String.IsNullOrEmpty(name)) throw new ArgumentNullException(nameof(name), "Attribute names cannot be null or empty.");
         Name = name;
     }
 
