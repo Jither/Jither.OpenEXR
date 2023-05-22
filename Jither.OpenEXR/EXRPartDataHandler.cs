@@ -6,27 +6,48 @@ public abstract class EXRPartDataHandler
 {
     protected readonly EXRPart part;
     protected readonly Compressor compressor;
-    protected int PixelsPerBlock => compressor.ScanLinesPerBlock * part.DataWindow.Width;
+    protected readonly int chunkCount;
+    protected readonly bool isMultiPart;
+
+
     protected int PixelsPerScanLine => part.DataWindow.Width;
     protected int BytesPerPixel => part.Channels.Sum(c => c.Type.GetBytesPerPixel());
     protected int BitsPerPixel => BytesPerPixel * 8;
-    public int BytesPerBlock => BytesPerPixel * PixelsPerBlock;
-    public int BytesInLastBlock {
-        get
-        {
-            int scanlines = part.DataWindow.Height % compressor.ScanLinesPerBlock;
-            if (scanlines == 0)
-            {
-                scanlines = compressor.ScanLinesPerBlock;
-            }
-            return part.DataWindow.Width * scanlines * BytesPerPixel;
-        }
-    }
+
+    protected int BytesPerBlock => compressor.ScanLinesPerBlock * part.DataWindow.Width * BytesPerPixel;
+
     public int TotalBytes => part.DataWindow.Width * part.DataWindow.Height * BytesPerPixel;
 
-    protected EXRPartDataHandler(EXRPart part)
+    protected int GetBlockScanLineCount(int chunkIndex)
+    {
+        if (chunkIndex < chunkCount - 1)
+        {
+            return compressor.ScanLinesPerBlock;
+        }
+        // Last block may not have the full set:
+        int scanlines = part.DataWindow.Height % compressor.ScanLinesPerBlock;
+        if (scanlines == 0)
+        {
+            scanlines = compressor.ScanLinesPerBlock;
+        }
+        return scanlines;
+    }
+
+    protected int GetBlockPixelCount(int chunkIndex)
+    {
+        int scanlines = GetBlockScanLineCount(chunkIndex);
+        return part.DataWindow.Width * scanlines;
+    }
+
+    protected int GetBlockByteCount(int chunkIndex)
+    {
+        return chunkIndex < chunkCount - 1 ? BytesPerBlock : Math.Min(BytesPerBlock, GetBlockPixelCount(chunkCount - 1) * BytesPerPixel);
+    }
+
+    protected EXRPartDataHandler(EXRPart part, EXRVersion version)
     {
         this.part = part;
+
         compressor = part.Compression switch
         {
             EXRCompression.None => new NullCompressor(),
@@ -36,6 +57,22 @@ public abstract class EXRPartDataHandler
             EXRCompression.PIZ => new PizCompressor(),
             _ => throw new NotSupportedException($"{part.Compression} compression not supported")
         };
+        
+        isMultiPart = version.IsMultiPart;
+
+        if (isMultiPart)
+        {
+            chunkCount = part.GetAttributeOrThrow<int>("chunkCount");
+        }
+        else if (version.IsSinglePartTiled)
+        {
+            // TODO: offsetTable for single part tiled
+            throw new NotImplementedException($"Reading of single part tiled images is not implemented.");
+        }
+        else
+        {
+            chunkCount = (int)Math.Ceiling((double)part.DataWindow.Height / compressor.ScanLinesPerBlock);
+        }
     }
 
     protected List<int> GetInterleaveOffsets(IEnumerable<string> channelOrder, out int bytesPerPixel, bool allChannelsRequired = false)

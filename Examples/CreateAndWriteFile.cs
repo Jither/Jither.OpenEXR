@@ -30,10 +30,17 @@ internal class CreateAndWriteFile : Example
                 Compression = EXRCompression.ZIP,
                 Channels = chlist
             };
+            // We can add optional attributes:
+            part.SetAttribute(AttributeNames.Comments, "A simple RGB gradient");
+
+            // And custom ones:
+            part.SetAttribute("application", "Jither.OpenEXR");
+
+            // Add the part information to the file:
             file.AddPart(part);
 
             // Now we can write the headers:
-            file.Write("output.exr");
+            file.Write("output-create.exr");
 
             // In order to write the data for our part, we access EXRPart.DataWriter
             Debug.Assert(part.DataWriter != null);
