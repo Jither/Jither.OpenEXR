@@ -15,73 +15,79 @@ public class RLECompressor : Compressor
         // We only need a compressed array of the same size as uncompressed. If we're about to overflow it,
         // we'll return CompressionResult.NoGain.
         byte[] uncompressed = ArrayPool<byte>.Shared.Rent(length);
-        byte[] compressed = ArrayPool<byte>.Shared.Rent(length);
-        int destIndex = 0;
         try
         {
-            source.Read(uncompressed, 0, length);
-            ReorderAndPredict(uncompressed, length);
-
-            int runs = 0;
-            int rune = 1;
-            while (runs < length)
+            byte[] compressed = ArrayPool<byte>.Shared.Rent(length);
+            int destIndex = 0;
+            try
             {
-                byte runLength = 0;
-                byte value = uncompressed[runs];
-                while (rune < length && uncompressed[rune] == value && runLength < MAX_RUN_LENGTH)
-                {
-                    rune++;
-                    runLength++;
-                }
+                source.Read(uncompressed, 0, length);
+                ReorderAndPredict(uncompressed, length);
 
-                if (runLength >= MIN_RUN_LENGTH - 1)
+                int runs = 0;
+                int rune = 1;
+                while (runs < length)
                 {
-                    if (destIndex + 2 >= compressed.Length)
+                    byte runLength = 0;
+                    byte value = uncompressed[runs];
+                    while (rune < length && uncompressed[rune] == value && runLength < MAX_RUN_LENGTH)
                     {
-                        return CompressionResult.NoGain;
+                        rune++;
+                        runLength++;
                     }
-                    compressed[destIndex++] = runLength;
-                    compressed[destIndex++] = value;
-                    runs = rune;
-                }
-                else
-                {
-                    runLength++;
-                    while (rune < length &&
-                        ((
-                            (rune + 1 >= length) ||
-                            (uncompressed[rune] != uncompressed[rune + 1])
-                        ) ||
-                        (
-                            (rune + 2 >= length) ||
-                            (uncompressed[rune + 1] != uncompressed[rune + 2])
-                        )) &&
-                        runLength < MAX_RUN_LENGTH)
+
+                    if (runLength >= MIN_RUN_LENGTH - 1)
+                    {
+                        if (destIndex + 2 >= compressed.Length)
+                        {
+                            return CompressionResult.NoGain;
+                        }
+                        compressed[destIndex++] = runLength;
+                        compressed[destIndex++] = value;
+                        runs = rune;
+                    }
+                    else
                     {
                         runLength++;
-                        rune++;
-                    }
-                    
-                    int count = rune - runs;
-                    if (destIndex + 1 + count >= compressed.Length)
-                    {
-                        return CompressionResult.NoGain;
-                    }
-                    compressed[destIndex++] = (byte)(-runLength);
-                    Array.Copy(uncompressed, runs, compressed, destIndex, count);
-                    destIndex += count;
+                        while (rune < length &&
+                            ((
+                                (rune + 1 >= length) ||
+                                (uncompressed[rune] != uncompressed[rune + 1])
+                            ) ||
+                            (
+                                (rune + 2 >= length) ||
+                                (uncompressed[rune + 1] != uncompressed[rune + 2])
+                            )) &&
+                            runLength < MAX_RUN_LENGTH)
+                        {
+                            runLength++;
+                            rune++;
+                        }
 
-                    runs += count;
+                        int count = rune - runs;
+                        if (destIndex + 1 + count >= compressed.Length)
+                        {
+                            return CompressionResult.NoGain;
+                        }
+                        compressed[destIndex++] = (byte)(-runLength);
+                        Array.Copy(uncompressed, runs, compressed, destIndex, count);
+                        destIndex += count;
+
+                        runs += count;
+                    }
+                    rune++;
                 }
-                rune++;
-            }
 
-            dest.Write(compressed, 0, destIndex);
-            return CompressionResult.Success;
+                dest.Write(compressed, 0, destIndex);
+                return CompressionResult.Success;
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(compressed);
+            }
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(compressed);
             ArrayPool<byte>.Shared.Return(uncompressed);
         }
     }

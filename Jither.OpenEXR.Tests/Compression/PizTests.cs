@@ -119,7 +119,7 @@ public class PizTests
     [InlineData(997, 997)]
     public void Ground_truth(int width, int height)
     {
-        Random rnd = new Random(31234);
+        var rnd = new Random(31234);
 
         int size = width * height;
 
@@ -251,7 +251,8 @@ public class PizTests
     {
         var uncompressed = UNCOMPRESSED_ARRAY_SPECIAL;
         var compressed = HuffmanCoding.Compress(uncompressed);
-        var decompressed = HuffmanCoding.Decompress(compressed, uncompressed.Length);
+        ushort[] decompressed = new ushort[uncompressed.Length];
+        HuffmanCoding.Decompress(compressed, decompressed);
         Assert.Equal(uncompressed, decompressed);
     }
 
@@ -260,7 +261,8 @@ public class PizTests
     {
         var uncompressed = new ushort[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
         var compressed = HuffmanCoding.Compress(uncompressed);
-        var decompressed = HuffmanCoding.Decompress(compressed, uncompressed.Length);
+        ushort[] decompressed = new ushort[uncompressed.Length];
+        HuffmanCoding.Decompress(compressed, decompressed);
         Assert.Equal(uncompressed, decompressed);
     }
 
@@ -275,11 +277,12 @@ public class PizTests
     void Huffman_longcodes()
     {
         // This exercises the longcode implementation
-        Random rnd = new Random(1234);
+        var rnd = new Random(1234);
 
         var uncompressed = noise_16bit(rnd, 17000);
         var compressed = HuffmanCoding.Compress(uncompressed);
-        var decompressed = HuffmanCoding.Decompress(compressed, uncompressed.Length);
+        var decompressed = new ushort[uncompressed.Length];
+        HuffmanCoding.Decompress(compressed, decompressed);
         Assert.Equal(uncompressed, decompressed);
     }
 }

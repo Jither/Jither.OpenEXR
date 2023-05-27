@@ -24,9 +24,9 @@ internal class Program
             }
 
             file.ForceVersion2 = true;
-            file.Parts[0].Compression = EXRCompression.RLE;
+            file.Parts[0].Compression = EXRCompression.PIZ;
 
-            file.Write(@"D:\helmet-rle.exr");
+            file.Write(@"D:\helmet-piz.exr");
             int partIndex = 0;
             foreach (var part in file.Parts)
             {

@@ -8,8 +8,8 @@ namespace Jither.OpenEXR.Compression;
 
 public class PizCompressor : Compressor
 {
-    private const int USHORT_RANGE = 1 << 16;
-    private const int BITMAP_SIZE = USHORT_RANGE >> 3;
+    private const int LUT_SIZE = 1 << 16;
+    private const int BITMAP_SIZE = LUT_SIZE >> 3;
     public override int ScanLinesPerBlock => 32;
 
     // PIZ stream layout:
@@ -43,99 +43,209 @@ public class PizCompressor : Compressor
 
     public override CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info)
     {
-        byte[] uncompressedScanlineBytes = new byte[info.UncompressedByteSize];
-        source.ReadExactly(uncompressedScanlineBytes);
+        // TODO: Bit of a nested nightmare here, due to ArrayPool returns.
 
-        var channelInfos = CreateChannelInfos(info);
-
-        // PIZ uncompressed data should store all scanlines for each channel consecutively -
-        // e.g. A for all scanlines, followed by B for all scanlines, followed by G, followed by R.
-        // Here we do the rearrangement:
-        var uncompressedArray = ArrayPool<ushort>.Shared.Rent(info.UncompressedByteSize / 2);
+        var uncompressedScanlineBytes = ArrayPool<byte>.Shared.Rent(info.UncompressedByteSize);
         try
         {
-            // The array may (mostly will) not be the size of the data. We use a span over the exact for convenience
-            var uncompressed = uncompressedArray.AsSpan(0, uncompressedScanlineBytes.Length / 2);
+            source.ReadExactly(uncompressedScanlineBytes, 0, info.UncompressedByteSize);
 
-            int nextByteOffset = 0;
-            for (int y = info.Bounds.Top; y < info.Bounds.Bottom; y++)
+            var channelInfos = CreateChannelInfos(info);
+
+            // PIZ uncompressed data should store all scanlines for each channel consecutively -
+            // e.g. A for all scanlines, followed by B for all scanlines, followed by G, followed by R.
+            // Here we do the rearrangement:
+            var uncompressedArray = ArrayPool<ushort>.Shared.Rent(info.UncompressedByteSize / 2);
+            try
             {
-                foreach (var channel in channelInfos)
+                // The array may (mostly will) not be the size of the data. We use a span over the exact size for convenience
+                var uncompressed = uncompressedArray.AsSpan(0, info.UncompressedByteSize / 2);
+
+                int nextByteOffset = 0;
+                for (int y = info.Bounds.Top; y < info.Bounds.Bottom; y++)
                 {
-                    if (y % channel.YSampling != 0)
+                    foreach (var channel in channelInfos)
                     {
-                        continue;
+                        if (y % channel.YSampling != 0)
+                        {
+                            continue;
+                        }
+                        var byteSize = channel.BytesPerLine;
+                        var ushortSize = channel.UShortsPerLine;
+                        var channelScanline = MemoryMarshal.Cast<byte, ushort>(uncompressedScanlineBytes.AsSpan(nextByteOffset, byteSize));
+                        var resultSpan = uncompressed.Slice(channel.NextScanLineUShortOffset, ushortSize);
+                        channel.NextScanLineUShortOffset += ushortSize;
+                        channelScanline.CopyTo(resultSpan);
+                        nextByteOffset += byteSize;
                     }
-                    var byteSize = channel.BytesPerLine;
-                    var ushortSize = channel.UShortsPerLine;
-                    var channelScanline = MemoryMarshal.Cast<byte, ushort>(uncompressedScanlineBytes.AsSpan(nextByteOffset, byteSize));
-                    var resultSpan = uncompressed.Slice(channel.NextScanLineUShortOffset, ushortSize);
-                    channel.NextScanLineUShortOffset += ushortSize;
-                    channelScanline.CopyTo(resultSpan);
-                    nextByteOffset += byteSize;
                 }
-            }
 
-            (var bitmap, var minNonZero, var maxNonZero) = BitmapFromData(uncompressed);
-            (var lut, var maxValue) = ForwardLUTFromBitmap(bitmap);
-            ApplyLUT(lut, uncompressed);
-
-            foreach (var channelInfo in channelInfos)
-            {
-                var data = uncompressed.Slice(channelInfo.StartUShortOffset, channelInfo.UShortsTotal);
-                // For 32 bit channels, each half is transformed separately:
-                for (int offset = 0; offset < channelInfo.UShortsPerPixel; offset++)
+                byte[] bitmapArray = ArrayPool<byte>.Shared.Rent(BITMAP_SIZE);
+                try
                 {
-                    Wavelet.Encode2D(
-                        data[offset..],
-                        channelInfo.Resolution.X,
-                        channelInfo.UShortsPerPixel,
-                        channelInfo.Resolution.Y,
-                        channelInfo.UShortsPerLine,
-                        maxValue
-                    );
+                    var bitmap = bitmapArray.AsSpan(0, BITMAP_SIZE);
+
+                    (var minNonZero, var maxNonZero) = BitmapFromData(uncompressed, bitmap);
+                    ushort[] lutArray = ArrayPool<ushort>.Shared.Rent(LUT_SIZE);
+                    try
+                    {
+                        var lut = lutArray.AsSpan(0, LUT_SIZE);
+
+                        var maxValue = ForwardLUTFromBitmap(bitmap, lut);
+                        ApplyLUT(lut, uncompressed);
+
+                        foreach (var channelInfo in channelInfos)
+                        {
+                            var data = uncompressed.Slice(channelInfo.StartUShortOffset, channelInfo.UShortsTotal);
+                            // For 32 bit channels, each half is transformed separately:
+                            for (int offset = 0; offset < channelInfo.UShortsPerPixel; offset++)
+                            {
+                                Wavelet.Encode2D(
+                                    data[offset..],
+                                    channelInfo.Resolution.X,
+                                    channelInfo.UShortsPerPixel,
+                                    channelInfo.Resolution.Y,
+                                    channelInfo.UShortsPerLine,
+                                    maxValue
+                                );
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        ArrayPool<ushort>.Shared.Return(lutArray);
+                    }
+
+                    var compressed = HuffmanCoding.Compress(uncompressed);
+
+                    int bitmapSize = 4 + maxNonZero - minNonZero + 1;
+                    if (compressed.Length + bitmapSize + 4 >= info.UncompressedByteSize)
+                    {
+                        return CompressionResult.NoGain;
+                    }
+
+                    using (var writer = new BinaryWriter(dest, Encoding.UTF8, leaveOpen: true))
+                    {
+                        writer.Write((ushort)minNonZero);
+                        writer.Write((ushort)maxNonZero);
+                        // Bitmap is stored only from the first to the last non-zero value
+                        // If first is larger than last non-zero value, the bitmap is all 0, and we don't store anything
+                        if (minNonZero <= maxNonZero)
+                        {
+                            writer.Write(bitmap.Slice(minNonZero, maxNonZero - minNonZero + 1));
+                        }
+                        writer.Write(compressed.Length);
+                        writer.Write(compressed);
+
+                        return CompressionResult.Success;
+                    }
                 }
-            }
-
-            var compressed = HuffmanCoding.Compress(uncompressed);
-
-            int bitmapSize = 4 + maxNonZero - minNonZero + 1;
-            if (compressed.Length + bitmapSize + 4 >= info.UncompressedByteSize)
-            {
-                return CompressionResult.NoGain;
-            }
-
-            using (var writer = new BinaryWriter(dest, Encoding.UTF8, leaveOpen: true))
-            {
-                writer.Write((ushort)minNonZero);
-                writer.Write((ushort)maxNonZero);
-                // Bitmap is stored only from the first to the last non-zero value
-                // If first is larger than last non-zero value, the bitmap is all 0, and we don't store anything
-                if (minNonZero <= maxNonZero)
+                finally
                 {
-                    writer.Write(bitmap.AsSpan(minNonZero, maxNonZero - minNonZero + 1));
+                    ArrayPool<byte>.Shared.Return(bitmapArray);
                 }
-                writer.Write(compressed.Length);
-                writer.Write(compressed);
-                
-                return CompressionResult.Success;
+            }
+            finally
+            {
+                ArrayPool<ushort>.Shared.Return(uncompressedArray);
             }
         }
         finally
         {
-            ArrayPool<ushort>.Shared.Return(uncompressedArray);
+            ArrayPool<byte>.Shared.Return(uncompressedScanlineBytes);
         }
     }
 
     public override void InternalDecompress(Stream source, Stream dest, PixelDataInfo info)
     {
-        int expectedUShortSize = info.UncompressedByteSize / 2;
+        // TODO: Bit of a nested nightmare here, due to ArrayPool returns.
 
-        // Read data:
+        var lutArray = ArrayPool<ushort>.Shared.Rent(LUT_SIZE);
+        try
+        {
+            var decompressedArray = ArrayPool<ushort>.Shared.Rent(info.UncompressedByteSize);
+            try
+            {
+                var lut = lutArray.AsSpan(0, LUT_SIZE);
+                var decompressed = decompressedArray.AsSpan(0, info.UncompressedByteSize);
+
+                // Read data:
+
+                var maxValue = ReadAndDecompress(source, decompressed, lut);
+
+                var channelInfos = CreateChannelInfos(info);
+
+                // Wavelet transform:
+
+                foreach (var channelInfo in channelInfos)
+                {
+                    var data = decompressed.Slice(channelInfo.StartUShortOffset, channelInfo.UShortsTotal);
+                    // For 32 bit channels, each half is transformed seperately:
+                    for (int offset = 0; offset < channelInfo.UShortsPerPixel; offset++)
+                    {
+                        Wavelet.Decode2D(
+                            data[offset..],
+                            channelInfo.Resolution.X,
+                            channelInfo.UShortsPerPixel,
+                            channelInfo.Resolution.Y,
+                            channelInfo.UShortsPerLine,
+                            maxValue
+                        );
+                    }
+                }
+
+                ApplyLUT(lut, decompressed);
+
+                // TODO: Handle Big Endian
+                var decompressedAsBytes = MemoryMarshal.AsBytes<ushort>(decompressed);
+
+                // The uncompressed PIZ data stores all scanlines for each channel consecutively -
+                // e.g. A for all scanlines, followed by B for all scanlines, followed by G, followed by R.
+                // Split into scanlines, each containing its own (e.g.) ABGR channels.
+                var result = ArrayPool<byte>.Shared.Rent(decompressedAsBytes.Length);
+                try
+                {
+                    int resultIndex = 0;
+                    for (int y = info.Bounds.Top; y < info.Bounds.Bottom; y++)
+                    {
+                        foreach (var channel in channelInfos)
+                        {
+                            if (y % channel.YSampling != 0)
+                            {
+                                continue;
+                            }
+                            var size = channel.BytesPerLine;
+                            var channelScanline = decompressedAsBytes.Slice(channel.NextScanLineByteOffset, size);
+                            channel.NextScanLineByteOffset += size;
+                            var resultSpan = result.AsSpan(resultIndex, size);
+                            channelScanline.CopyTo(resultSpan);
+                            resultIndex += size;
+                        }
+                    }
+                    dest.Write(result, 0, decompressedAsBytes.Length);
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(result);
+                }
+            }
+            finally
+            {
+                ArrayPool<ushort>.Shared.Return(decompressedArray);
+            }
+        }
+        finally
+        {
+            ArrayPool<ushort>.Shared.Return(lutArray);
+        }
+    }
+
+    private ushort ReadAndDecompress(Stream source, Span<ushort> decompressed, Span<ushort> lut)
+    {
+        // TODO: Bit of a nested nightmare here, due to ArrayPool returns.
 
         ushort minNonZeroIndex, maxNonZeroIndex;
-        byte[] bitmap = new byte[BITMAP_SIZE];
-        byte[] compressed;
+
         using (var reader = new BinaryReader(source, Encoding.UTF8, leaveOpen: true))
         {
             minNonZeroIndex = reader.ReadUInt16();
@@ -146,78 +256,40 @@ public class PizCompressor : Compressor
                 throw new CompressionException($"Error in PIZ data: min/max non-zero indices exceed bitmap size");
             }
 
-            // Bitmap is stored only from the first to the last non-zero value
-            // If first is larger than last non-zero value, the bitmap is all 0.
-            if (minNonZeroIndex <= maxNonZeroIndex)
+            byte[] bitmap = ArrayPool<byte>.Shared.Rent(BITMAP_SIZE);
+            try
             {
-                source.ReadExactly(bitmap, minNonZeroIndex, maxNonZeroIndex - minNonZeroIndex + 1);
-            }
-
-            int dataSize = reader.ReadInt32();
-
-            compressed = reader.ReadBytes(dataSize);
-        }
-
-        // Decompression:
-
-        (var lut, var maxValue) = ReverseLUTFromBitmap(bitmap);
-
-        var decompressed = HuffmanCoding.Decompress(compressed, expectedUShortSize);
-
-        var channelInfos = CreateChannelInfos(info);
-
-        foreach (var channelInfo in channelInfos)
-        {
-            var data = decompressed.AsSpan(channelInfo.StartUShortOffset, channelInfo.UShortsTotal);
-            // For 32 bit channels, each half is transformed seperately:
-            for (int offset = 0; offset < channelInfo.UShortsPerPixel; offset++)
-            {
-                Wavelet.Decode2D(
-                    data[offset..],
-                    channelInfo.Resolution.X,
-                    channelInfo.UShortsPerPixel,
-                    channelInfo.Resolution.Y,
-                    channelInfo.UShortsPerLine,
-                    maxValue
-                );
-            }
-        }
-
-        ApplyLUT(lut, decompressed);
-
-        // TODO: Handle Big Endian
-        var decompressedAsBytes = MemoryMarshal.AsBytes<ushort>(decompressed);
-
-        // The uncompressed PIZ data stores all scanlines for each channel consecutively -
-        // e.g. A for all scanlines, followed by B for all scanlines, followed by G, followed by R.
-        // Split into scanlines, each containing its own (e.g.) ABGR channels.
-        var result = ArrayPool<byte>.Shared.Rent(decompressedAsBytes.Length);
-        try
-        {
-            int resultIndex = 0;
-            for (int y = info.Bounds.Top; y < info.Bounds.Bottom; y++)
-            {
-                foreach (var channel in channelInfos)
+                Array.Fill<byte>(bitmap, 0, 0, BITMAP_SIZE);
+                // Bitmap is stored only from the first to the last non-zero value
+                // If first is larger than last non-zero value, the bitmap is all 0.
+                if (minNonZeroIndex <= maxNonZeroIndex)
                 {
-                    if (y % channel.YSampling != 0)
-                    {
-                        continue;
-                    }
-                    var size = channel.BytesPerLine;
-                    var channelScanline = decompressedAsBytes.Slice(channel.NextScanLineByteOffset, size);
-                    channel.NextScanLineByteOffset += size;
-                    var resultSpan = result.AsSpan(resultIndex, size);
-                    channelScanline.CopyTo(resultSpan);
-                    resultIndex += size;
+                    source.ReadExactly(bitmap, minNonZeroIndex, maxNonZeroIndex - minNonZeroIndex + 1);
+                }
+
+                int dataSize = reader.ReadInt32();
+
+                byte[] compressed = ArrayPool<byte>.Shared.Rent(dataSize);
+                try
+                {
+                    reader.Read(compressed, 0, dataSize);
+
+                    var maxValue = ReverseLUTFromBitmap(bitmap, lut);
+
+                    HuffmanCoding.Decompress(compressed, decompressed);
+
+                    return maxValue;
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(compressed);
                 }
             }
-            dest.Write(result, 0, decompressedAsBytes.Length);
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(bitmap);
+            }
         }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(result);
-        }
-
     }
 
     private static List<ChannelInfo> CreateChannelInfos(PixelDataInfo info)
@@ -235,11 +307,10 @@ public class PizCompressor : Compressor
         return channelInfos;
     }
 
-    private static (byte[] bitmap, int minIndexNonZero, int maxIndexNonZero) BitmapFromData(Span<ushort> data)
+    private static (int minIndexNonZero, int maxIndexNonZero) BitmapFromData(Span<ushort> data, Span<byte> bitmap)
     {
         int minIndexNonZero = BITMAP_SIZE - 1;
         int maxIndexNonZero = 0;
-        var bitmap = new byte[BITMAP_SIZE];
 
         for (int i = 0; i < data.Length; i++)
         {
@@ -264,17 +335,16 @@ public class PizCompressor : Compressor
             }
         }
 
-        return (bitmap, minIndexNonZero, maxIndexNonZero);
+        return (minIndexNonZero, maxIndexNonZero);
     }
 
-    private static (ushort[] lut, ushort maxValue) ForwardLUTFromBitmap(byte[] bitmap)
+    private static ushort ForwardLUTFromBitmap(Span<byte> bitmap, Span<ushort> lut)
     {
         ushort k = 0;
-        ushort[] lut = new ushort[USHORT_RANGE];
 
-        for (uint i = 0; i < USHORT_RANGE; i++)
+        for (int i = 0; i < LUT_SIZE; i++)
         {
-            if (i == 0 || (bitmap[i >> 3] & (1 << (int)(i & 0b111))) != 0)
+            if (i == 0 || (bitmap[i >> 3] & (1 << (i & 0b111))) != 0)
             {
                 lut[i] = k++;
             }
@@ -284,18 +354,17 @@ public class PizCompressor : Compressor
             }
         }
 
-        return (lut, (ushort)(k - 1));
+        return (ushort)(k - 1);
     }
 
-    private static (ushort[] lut, ushort maxValue) ReverseLUTFromBitmap(byte[] bitmap)
+    private static ushort ReverseLUTFromBitmap(Span<byte> bitmap, Span<ushort> lut)
     {
-        uint n;
-        uint k = 0;
-        ushort[] lut = new ushort[USHORT_RANGE];
+        int n;
+        int k = 0;
 
-        for (uint i = 0; i < USHORT_RANGE; i++)
+        for (int i = 0; i < LUT_SIZE; i++)
         {
-            if (i == 0 || (bitmap[i >> 3] & (1 << (int)(i & 0b111))) != 0)
+            if (i == 0 || (bitmap[i >> 3] & (1 << (i & 0b111))) != 0)
             {
                 lut[k++] = (ushort)i;
             }
@@ -303,15 +372,15 @@ public class PizCompressor : Compressor
 
         n = k - 1;
 
-        while (k < USHORT_RANGE)
+        while (k < LUT_SIZE)
         {
             lut[k++] = 0;
         }
 
-        return (lut, (ushort)n);
+        return (ushort)n;
     }
 
-    private static void ApplyLUT(ushort[] lut, Span<ushort> data)
+    private static void ApplyLUT(Span<ushort> lut, Span<ushort> data)
     {
         for (int i = 0; i < data.Length; i++)
         {

@@ -79,7 +79,7 @@ public static class HuffmanCoding
         }
     }
 
-    public static ushort[] Decompress(byte[] compressed, int expectedSize)
+    public static void Decompress(byte[] compressed, Span<ushort> decompressed)
     {
         const int headerSize = 5 * sizeof(uint);
 
@@ -112,7 +112,7 @@ public static class HuffmanCoding
             }
             var decodingTable = BuildDecodingTable(encodingTable, minIndex, maxIndex);
 
-            return Decode(encodingTable, decodingTable, compressedBits, bitCount, maxIndex, expectedSize);
+            Decode(encodingTable, decodingTable, compressedBits, decompressed, bitCount, maxIndex);
         }
     }
 
@@ -743,11 +743,9 @@ public static class HuffmanCoding
         return bitsWritten;
     }
 
-    private static ushort[] Decode(ulong[] encodingTable, HufDec[] decodingTable, BitStreamer compressed, ulong bitLength, int runLengthCode, int expectedLength)
+    private static void Decode(ulong[] encodingTable, HufDec[] decodingTable, BitStreamer compressed, Span<ushort> decompressed, ulong bitLength, int runLengthCode)
     {
         int destIndex = 0;
-
-        ushort[] uncompressed = new ushort[expectedLength];
 
         while (compressed.RemainingBytes > 0)
         {
@@ -762,7 +760,7 @@ public static class HuffmanCoding
                     // Get short code
                     compressed.Advance(hdec.ShortLength);
 
-                    destIndex += compressed.ReadCode(hdec.ShortCode, runLengthCode, uncompressed, destIndex);
+                    destIndex += compressed.ReadCode(hdec.ShortCode, runLengthCode, decompressed, destIndex);
                 }
                 else
                 {
@@ -779,7 +777,7 @@ public static class HuffmanCoding
                         if (HufCode(code) == compressed.PeekBits(length))
                         {
                             compressed.Advance(length);
-                            destIndex += compressed.ReadCode(longCode[j], runLengthCode, uncompressed, destIndex);
+                            destIndex += compressed.ReadCode(longCode[j], runLengthCode, decompressed, destIndex);
                             break;
                         }
                     }
@@ -805,14 +803,12 @@ public static class HuffmanCoding
             if (hdec.ShortLength > 0)
             {
                 compressed.Advance(hdec.ShortLength);
-                destIndex += compressed.ReadCode(hdec.ShortCode, runLengthCode, uncompressed, destIndex);
+                destIndex += compressed.ReadCode(hdec.ShortCode, runLengthCode, decompressed, destIndex);
             }
             else
             {
                 throw new PizHuffmanException($"Corrupt PIZ chunk");
             }
         }
-
-        return uncompressed;
     }
 }
