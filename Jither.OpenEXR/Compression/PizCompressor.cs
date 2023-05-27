@@ -10,7 +10,7 @@ public class PizCompressor : Compressor
 {
     private const int LUT_SIZE = 1 << 16;
     private const int BITMAP_SIZE = LUT_SIZE >> 3;
-    public override int ScanLinesPerBlock => 32;
+    public override int ScanLinesPerChunk { get; } = EXRCompression.PIZ.GetScanLinesPerChunk();
 
     // PIZ stream layout:
     // - ushort minNonZeroIndex

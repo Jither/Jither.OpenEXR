@@ -7,7 +7,7 @@ public class RLECompressor : Compressor
     private const int MAX_RUN_LENGTH = 127;
     private const int MIN_RUN_LENGTH = 3;
 
-    public override int ScanLinesPerBlock => 1;
+    public override int ScanLinesPerChunk { get; } = EXRCompression.RLE.GetScanLinesPerChunk();
 
     public override CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info)
     {

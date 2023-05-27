@@ -104,20 +104,21 @@ internal class EXRHeader
         }
     }
 
-    /// <summary>
-    /// Data types are defined by the type attribute. There are four types:
-    /// 
-    /// 1. Scan line images: indicated by a type attribute of scanlineimage.
-    /// 2. Tiled images: indicated by a type attribute of tiledimage.
-    /// 3. Deep scan line images: indicated by a type attribute of deepscanline.
-    /// 4. Deep tiled images: indicated by a type attribute of deeptile.
-    /// 
-    /// Required if the file is either MultiPart or NonImage.
-    /// </summary>
-    /// <remarks>
-    /// This value must agree with the version field’s tile bit (9) and non-image (deep data) bit (11) settings.
-    /// </remarks>
-    public PartType? Type => GetAttributeOrDefault<PartType>(AttributeNames.Type);
+    public string? Type
+    {
+        get => GetAttributeOrDefault<string>(AttributeNames.Type);
+        set
+        {
+            if (value == null)
+            {
+                RemoveAttribute(AttributeNames.Type);
+            }
+            else
+            {
+                SetAttribute(new EXRAttribute<string>(AttributeNames.Type, value));
+            }
+        }
+    }
 
     /// <summary>
     /// Version is required for deep data (deepscanline and deeptile) parts. If not specified for other parts, 1 is assumed.

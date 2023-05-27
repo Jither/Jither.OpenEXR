@@ -47,7 +47,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         int destOffset = 0;
         for (int i = 0; i < chunkCount; i++)
         {
-            int bytesRead = InternalReadBlock(i, dest, destOffset);
+            int bytesRead = InternalReadChunk(i, dest, destOffset);
             destOffset += bytesRead;
         }
     }
@@ -62,36 +62,36 @@ public class EXRPartDataReader : EXRPartDataHandler
         int offset = 0;
         for (int i = 0; i < chunkCount; i++)
         {
-            int bytesRead = ReadBlockInterleaved(i, dest, channelOrder, offset);
+            int bytesRead = ReadChunkInterleaved(i, dest, channelOrder, offset);
             offset += bytesRead;
         }
     }
 
-    public void ReadBlock(int chunkIndex, byte[] dest, int destOffset = 0)
+    public void ReadChunk(int chunkIndex, byte[] dest, int destOffset = 0)
     {
-        InternalReadBlock(chunkIndex, dest, destOffset);
+        InternalReadChunk(chunkIndex, dest, destOffset);
     }
 
-    public int ReadBlockInterleaved(int chunkIndex, byte[] dest, IEnumerable<string> channelOrder, int offset = 0)
+    public int ReadChunkInterleaved(int chunkIndex, byte[] dest, IEnumerable<string> channelOrder, int offset = 0)
     {
         CheckInterleavedPrerequisites();
 
         // Offsets are always ordered with scanlines from top to bottom (INCREASING_Y). However, the order of the scanlines themselves within the file
-        // may be bottom to top or random (see LineOrder). Each block stores its first scanline's y coordinate, meaning it's possible to
+        // may be bottom to top or random (see LineOrder). Each scanline block stores its first scanline's y coordinate, meaning it's possible to
         // read blocks in file sequential order and reconstruct the scanline order - avoiding file seeks. For now, we just follow the
         // offset order.
 
         // Collect byte offsets for the channel components in each pixel. I.e., at what byte offset within the channel-interleaved pixel should each channel be stored?
         var destOffsets = GetInterleaveOffsets(channelOrder, out var interleavedBytesPerPixel);
 
-        var data = ArrayPool<byte>.Shared.Rent(GetBlockByteCount(chunkIndex));
+        var data = ArrayPool<byte>.Shared.Rent(GetChunkByteCount(chunkIndex));
         try
         {
-            int bytesRead = InternalReadBlock(chunkIndex, data, 0);
+            int bytesRead = InternalReadChunk(chunkIndex, data, 0);
 
             // The decompressed pixel data is stored with channels separated and ordered alphabetically
             int sourceOffset = 0;
-            int scanlineCount = GetBlockScanLineCount(chunkIndex);
+            int scanlineCount = GetChunkScanLineCount(chunkIndex);
 
             for (int scanline = 0; scanline < scanlineCount; scanline++)
             {
@@ -131,7 +131,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
     }
 
-    private int InternalReadBlock(int chunkIndex, byte[] dest, int destIndex)
+    private int InternalReadChunk(int chunkIndex, byte[] dest, int destIndex)
     {
         var offset = OffsetTable[chunkIndex];
         reader.Seek((long)offset);
@@ -140,7 +140,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         int pixelDataSize = reader.ReadInt();
 
         var chunkStream = reader.GetChunkStream(pixelDataSize);
-        int bytesToRead = GetBlockByteCount(chunkIndex);
+        int bytesToRead = GetChunkByteCount(chunkIndex);
         using (var destStream = new MemoryStream(dest, destIndex, bytesToRead))
         {
             // Yes, compressors could use the length or capacity of the stream rather than
@@ -148,7 +148,7 @@ public class EXRPartDataReader : EXRPartDataHandler
             // implementation in the future.
             var info = new PixelDataInfo(
                 part.Channels, 
-                new System.Drawing.Rectangle(0, y, PixelsPerScanLine, GetBlockScanLineCount(chunkIndex)),
+                new System.Drawing.Rectangle(0, y, PixelsPerScanLine, GetChunkScanLineCount(chunkIndex)),
                 bytesToRead
             );
 

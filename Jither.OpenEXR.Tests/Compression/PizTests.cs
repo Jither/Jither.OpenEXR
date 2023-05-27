@@ -282,7 +282,7 @@ public class PizTests
         var uncompressed = noise_16bit(rnd, 17000);
         var compressed = HuffmanCoding.Compress(uncompressed);
         var decompressed = new ushort[uncompressed.Length];
-        HuffmanCoding.Decompress(compressed, decompressed);
+        HuffmanCoding.Decompress(compressed, decompressed, compressed.Length);
         Assert.Equal(uncompressed, decompressed);
     }
 }

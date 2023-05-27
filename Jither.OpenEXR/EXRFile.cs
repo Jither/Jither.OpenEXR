@@ -109,6 +109,7 @@ public class EXRFile : IDisposable
             }
         }
         parts.Add(part);
+        part.AssignFile(this);
         if (part.Name != null)
         {
             partsByName.Add(part.Name, part);
@@ -129,6 +130,11 @@ public class EXRFile : IDisposable
             parts.RemoveAll(p => p.Name == name);
             partsByName.Remove(name);
         }
+    }
+
+    internal int GetPartNumber(EXRPart part)
+    {
+        return parts.IndexOf(part);
     }
 
     private void ReadHeaders(EXRReader reader)
@@ -172,6 +178,10 @@ public class EXRFile : IDisposable
 
     private void WriteHeaders(EXRWriter writer, EXRVersion version)
     {
+        foreach (var part in parts)
+        {
+            part.PrepareForWriting(version.IsMultiPart, version.HasNonImageParts);
+        }
         Validate(version);
 
         writer.WriteInt(20000630);

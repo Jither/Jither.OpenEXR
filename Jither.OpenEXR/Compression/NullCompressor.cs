@@ -4,7 +4,7 @@ public class NullCompressor : Compressor
 {
     public static NullCompressor Instance { get; } = new NullCompressor();
 
-    public override int ScanLinesPerBlock => 1;
+    public override int ScanLinesPerChunk { get; } = EXRCompression.None.GetScanLinesPerChunk();
 
     public override CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info)
     {

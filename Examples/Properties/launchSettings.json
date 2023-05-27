@@ -15,6 +15,10 @@
     "WSL": {
       "commandName": "WSL2",
       "distributionName": ""
+    },
+    "3 - Multi-part": {
+      "commandName": "Project",
+      "commandLineArgs": "3"
     }
   }
 }

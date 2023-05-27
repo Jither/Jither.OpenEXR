@@ -45,7 +45,7 @@ internal class CreateAndWriteFile : Example
             // In order to write the data for our part, we access EXRPart.DataWriter
             Debug.Assert(part.DataWriter != null);
 
-            // OpenEXR stores pixel data with channels separated in each of its blocks. The library provides methods to
+            // OpenEXR stores pixel data with channels separated in each of its chunks. The library provides methods to
             // convert to and from interleaved data.
             part.DataWriter.WriteInterleaved(pixelData, new[] { "R", "G", "B", "A" });
         }

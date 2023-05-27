@@ -15,10 +15,10 @@ public abstract class EXRPartDataHandler
     {
         if (chunkCount > 1)
         {
-            // <chunkCount> full blocks + possibly smaller last block
-            return GetBlockByteCount(0) * (chunkCount - 1) + GetBlockByteCount(chunkCount - 1);
+            // <chunkCount> full chunks + possibly smaller last chunk
+            return GetChunkByteCount(0) * (chunkCount - 1) + GetChunkByteCount(chunkCount - 1);
         }
-        return GetBlockByteCount(0);
+        return GetChunkByteCount(0);
     }
 
     protected void CheckInterleavedPrerequisites()
@@ -29,30 +29,30 @@ public abstract class EXRPartDataHandler
         }
     }
 
-    protected int GetBlockByteCount(int chunkIndex)
+    protected int GetChunkByteCount(int chunkIndex)
     {
-        var scanlines = GetBlockScanLineCount(chunkIndex);
+        var scanlines = GetChunkScanLineCount(chunkIndex);
         return part.Channels.GetByteCount(new Attributes.V2i(PixelsPerScanLine, scanlines));
     }
 
-    protected int GetBlockScanLineCount(int chunkIndex)
+    protected int GetChunkScanLineCount(int chunkIndex)
     {
         if (chunkIndex < chunkCount - 1)
         {
-            return compressor.ScanLinesPerBlock;
+            return compressor.ScanLinesPerChunk;
         }
-        // Last block may not have the full set:
-        int scanlines = part.DataWindow.Height % compressor.ScanLinesPerBlock;
+        // Last chunk may not have the full set:
+        int scanlines = part.DataWindow.Height % compressor.ScanLinesPerChunk;
         if (scanlines == 0)
         {
-            scanlines = compressor.ScanLinesPerBlock;
+            scanlines = compressor.ScanLinesPerChunk;
         }
         return scanlines;
     }
 
-    protected int GetBlockPixelCount(int chunkIndex)
+    protected int GetChunkPixelCount(int chunkIndex)
     {
-        int scanlines = GetBlockScanLineCount(chunkIndex);
+        int scanlines = GetChunkScanLineCount(chunkIndex);
         return part.DataWindow.Width * scanlines;
     }
 
@@ -83,7 +83,7 @@ public abstract class EXRPartDataHandler
         }
         else
         {
-            chunkCount = (int)Math.Ceiling((double)part.DataWindow.Height / compressor.ScanLinesPerBlock);
+            chunkCount = (int)Math.Ceiling((double)part.DataWindow.Height / compressor.ScanLinesPerChunk);
         }
     }
 
@@ -116,7 +116,7 @@ public abstract class EXRPartDataHandler
             {
                 if (offsets[i] < 0)
                 {
-                    throw new ArgumentException($"Channel order for interleaved block is missing channel '{channels[i].Name}'.", nameof(channelOrder));
+                    throw new ArgumentException($"Channel order for interleaved chunk is missing channel '{channels[i].Name}'.", nameof(channelOrder));
                 }
             }
         }

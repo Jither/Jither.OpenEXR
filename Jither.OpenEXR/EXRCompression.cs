@@ -100,3 +100,24 @@ public enum EXRCompression
     /// </summary>
     DWAB = 9,
 }
+
+public static class EXRCompressionExtensions
+{
+    public static int GetScanLinesPerChunk(this EXRCompression compression)
+    {
+        return compression switch
+        {
+            EXRCompression.None => 1,
+            EXRCompression.RLE => 1,
+            EXRCompression.ZIPS => 1,
+            EXRCompression.ZIP => 16,
+            EXRCompression.PIZ => 32,
+            EXRCompression.PXR24 => 16,
+            EXRCompression.B44 => 32,
+            EXRCompression.B44A => 32,
+            EXRCompression.DWAA => 32,
+            EXRCompression.DWAB => 256,
+            _ => throw new NotImplementedException($"{nameof(GetScanLinesPerChunk)} not implemented for {compression}")
+        }; ;
+    }
+}

@@ -5,7 +5,7 @@ namespace Jither.OpenEXR.Compression;
 
 public class ZipSCompressor : Compressor
 {
-    public override int ScanLinesPerBlock => 1;
+    public override int ScanLinesPerChunk { get; } = EXRCompression.ZIPS.GetScanLinesPerChunk();
 
     public override CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info)
     {

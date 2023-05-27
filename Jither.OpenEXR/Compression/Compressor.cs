@@ -9,7 +9,7 @@ namespace Jither.OpenEXR.Compression;
 
 public abstract class Compressor
 {
-    public abstract int ScanLinesPerBlock { get; }
+    public abstract int ScanLinesPerChunk { get; }
 
     public void Compress(Stream source, Stream dest, PixelDataInfo info)
     {
@@ -28,7 +28,7 @@ public abstract class Compressor
     {
         if (this is not NullCompressor && source.Length == info.UncompressedByteSize)
         {
-            // If compression actually turns out to inflate the data, the block will be written uncompressed instead.
+            // If compression actually turns out to inflate the data, the chunk will be written uncompressed instead.
             // There is no indication of this, other than the compressed data being the same size as the decompressed
             // data. Note that although uncompressed data is conceptually handled 1 scanline at a time, as opposed to
             // some of the compression methods, e.g. 16 scanlines of combined uncompressed data will look identical

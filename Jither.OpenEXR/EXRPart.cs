@@ -1,10 +1,12 @@
 ﻿using Jither.OpenEXR.Attributes;
+using Jither.OpenEXR.Compression;
 
 namespace Jither.OpenEXR;
 
 public class EXRPart
 {
     private readonly EXRHeader header;
+    private EXRFile file;
 
     public static readonly string[] RequiredAttributes = new[] {
         AttributeNames.Channels,
@@ -108,9 +110,47 @@ public class EXRPart
     /// The name attribute defines the name of each part. The name of each part must be unique. Names may contain ‘.’ characters to present a tree-like structure of the parts in a file.
     /// Required if the file is either MultiPart or NonImage.
     /// </summary>
-    public string? Name => header.Name;
+    public string? Name
+    {
+        get => header.Name;
+        set => header.Name = value;
+    }
 
-    public PartType? Type => header.Type;
+    /// <summary>
+    /// Data types are defined by the type attribute. There are four types:
+    /// 
+    /// 1. Scan line images: indicated by a type attribute of scanlineimage.
+    /// 2. Tiled images: indicated by a type attribute of tiledimage.
+    /// 3. Deep scan line images: indicated by a type attribute of deepscanline.
+    /// 4. Deep tiled images: indicated by a type attribute of deeptile.
+    /// 
+    /// Required if the file is either MultiPart or NonImage.
+    /// </summary>
+    /// <remarks>
+    /// This value must agree with the version field’s tile bit (9) and non-image (deep data) bit (11) settings.
+    /// </remarks>
+    public PartType Type
+    {
+        get => header.Type switch
+        {
+            "scanlineimage" => PartType.ScanLineImage,
+            "tiledimage" => PartType.TiledImage,
+            "deepscanline" => PartType.DeepScanLine,
+            "deeptile" => PartType.DeepTiled,
+            _ => PartType.Unknown
+        };
+        set
+        {
+            header.Type = value switch
+            {
+                PartType.ScanLineImage => "scanlineimage",
+                PartType.TiledImage => "tiledimage",
+                PartType.DeepScanLine => "deepscanline",
+                PartType.DeepTiled => "deeptile",
+                _ => null,
+            };
+        }
+    }
 
     /// <summary>
     /// Indicates whether the part has R, G and B channels (of any type)
@@ -138,15 +178,22 @@ public class EXRPart
     public EXRPartDataWriter? DataWriter { get; private set; }
 
     /// <summary>
+    /// Gets the part number of the part. -1 if the part isn't assigned to a file.
+    /// </summary>
+    public int PartNumber => file?.GetPartNumber(this) ?? -1;
+
+    /// <summary>
     /// Creates a new part with default required attributes.
     /// </summary>
-    public EXRPart(Box2i dataWindow, Box2i? displayWindow = null, string? name = null)
+    public EXRPart(Box2i dataWindow, Box2i? displayWindow = null, string? name = null, PartType type = PartType.Unknown)
     {
         header = new EXRHeader();
         if (name != null)
         {
-            header.Name = name;
+            Name = name;
         }
+        Type = type;
+
         // Set default required headers:
         header.DataWindow = dataWindow;
         header.DisplayWindow = displayWindow ?? header.DataWindow;
@@ -160,6 +207,11 @@ public class EXRPart
     internal EXRPart(EXRHeader header)
     {
         this.header = header;
+    }
+
+    internal void AssignFile(EXRFile file)
+    {
+        this.file = file;
     }
 
     /// <summary>
@@ -215,6 +267,18 @@ public class EXRPart
     internal void AssignDataWriter(EXRPartDataWriter writer)
     {
         this.DataWriter = writer;
+    }
+
+    internal void PrepareForWriting(bool fileIsMultiPart, bool fileHasDeepData)
+    {
+        if (fileIsMultiPart)
+        {
+            if (!header.HasAttribute(AttributeNames.ChunkCount))
+            {
+                int chunkCount = (int)Math.Ceiling((double)DataWindow.Height / Compression.GetScanLinesPerChunk());
+                SetAttribute(AttributeNames.ChunkCount, chunkCount);
+            }
+        }
     }
 
     /// <summary>
