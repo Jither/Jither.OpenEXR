@@ -9,23 +9,26 @@ public class RLECompressor : Compressor
 
     public override int ScanLinesPerBlock => 1;
 
-    public override void Compress(Stream source, Stream dest)
+    public override CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info)
     {
-        int length = (int)source.Length;
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(length);
+        int length = info.UncompressedByteSize;
+        // We only need a compressed array of the same size as uncompressed. If we're about to overflow it,
+        // we'll return CompressionResult.NoGain.
+        byte[] uncompressed = ArrayPool<byte>.Shared.Rent(length);
+        byte[] compressed = ArrayPool<byte>.Shared.Rent(length);
+        int destIndex = 0;
         try
         {
-            source.Read(buffer);
-            ReorderAndPredict(buffer, length);
+            source.Read(uncompressed);
+            ReorderAndPredict(uncompressed, length);
 
             int runs = 0;
             int rune = 1;
-            int bytesWritten = 0;
             while (runs < length)
             {
                 byte runLength = 0;
-                byte value = buffer[runs];
-                while (rune < length && buffer[rune] == value && runLength < MAX_RUN_LENGTH)
+                byte value = uncompressed[runs];
+                while (rune < length && uncompressed[rune] == value && runLength < MAX_RUN_LENGTH)
                 {
                     rune++;
                     runLength++;
@@ -33,9 +36,12 @@ public class RLECompressor : Compressor
 
                 if (runLength >= MIN_RUN_LENGTH - 1)
                 {
-                    dest.WriteByte(runLength);
-                    dest.WriteByte(value);
-                    bytesWritten += 2;
+                    if (destIndex + 2 >= compressed.Length)
+                    {
+                        return CompressionResult.NoGain;
+                    }
+                    compressed[destIndex++] = runLength;
+                    compressed[destIndex++] = value;
                     runs = rune;
                 }
                 else
@@ -44,35 +50,44 @@ public class RLECompressor : Compressor
                     while (rune < length &&
                         ((
                             (rune + 1 >= length) ||
-                            (buffer[rune] != buffer[rune + 1])
+                            (uncompressed[rune] != uncompressed[rune + 1])
                         ) ||
                         (
                             (rune + 2 >= length) ||
-                            (buffer[rune + 1] != buffer[rune + 2])
+                            (uncompressed[rune + 1] != uncompressed[rune + 2])
                         )) &&
                         runLength < MAX_RUN_LENGTH)
                     {
                         runLength++;
                         rune++;
                     }
-                    dest.WriteByte((byte)(-runLength));
+                    
                     int count = rune - runs;
-                    dest.Write(buffer, runs, count);
+                    if (destIndex + 1 + count >= compressed.Length)
+                    {
+                        return CompressionResult.NoGain;
+                    }
+                    compressed[destIndex++] = (byte)(-runLength);
+                    Array.Copy(uncompressed, runs, compressed, destIndex, count);
+                    destIndex += count;
+
                     runs += count;
-                    bytesWritten += count + 1;
                 }
                 rune++;
             }
+
+            return CompressionResult.Success;
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer);
+            ArrayPool<byte>.Shared.Return(uncompressed);
         }
     }
 
-    public override void Decompress(Stream source, Stream dest)
+    public override void InternalDecompress(Stream source, Stream dest, PixelDataInfo info)
     {
-        int length = (int)dest.Length;
+        int length = info.UncompressedByteSize;
+
         byte[] buffer = ArrayPool<byte>.Shared.Rent(length);
         try
         {

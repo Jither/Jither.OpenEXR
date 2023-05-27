@@ -1,4 +1,6 @@
-﻿namespace Jither.OpenEXR;
+﻿using Jither.OpenEXR.Attributes;
+
+namespace Jither.OpenEXR;
 
 public class Channel
 {
@@ -53,6 +55,7 @@ public class Channel
     /// </summary>
     /// <remarks>
     /// For RGBA images, <c>XSampling</c> is 1 for all channels - each channel contains data for every pixel.
+    /// Note that OpenEXR does not support subsampling of any channel for tiled images.
     /// </remarks>
     public int XSampling { get; }
 
@@ -62,12 +65,15 @@ public class Channel
     /// </summary>
     /// <remarks>
     /// For RGBA images, <c>YSampling</c> is 1 for all channels - each channel contains data for every pixel.
+    /// Note that OpenEXR does not support subsampling of any channel for tiled images.
     /// </remarks>
     public int YSampling { get; }
 
     public byte Reserved0 { get; }
     public byte Reserved1 { get; }
     public byte Reserved2 { get; }
+
+    public bool IsSubsampled => XSampling != 1 || YSampling != 1;
 
     public Channel(string name, EXRDataType type, PerceptualTreatment perceptualTreatment, byte reserved0, byte reserved1, byte reserved2, int xSampling, int ySampling)
     {
@@ -91,6 +97,23 @@ public class Channel
         Reserved2 = 0;
         XSampling = xSampling;
         YSampling = ySampling;
+    }
+
+    /// <summary>
+    /// Returns the number of pixels sampled in the channel for a given area (e.g. a block or tile)
+    /// </summary>
+    /// <returns></returns>
+    public V2i GetSubsampledResolution(V2i area)
+    {
+        return new V2i(area.X / XSampling, area.Y / YSampling);
+    }
+
+    /// <summary>
+    /// Returns the number of bytes occupied by the channel for a given area, taking into account sub-sampling and value type (16-bit or 32-bit).
+    /// </summary>
+    public int GetByteCount(V2i area)
+    {
+        return GetSubsampledResolution(area).Area * Type.GetBytesPerPixel();
     }
 
     public override string ToString()

@@ -5,7 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-
+  
+  <ItemGroup>
+    <InternalsVisibleTo Include="Jither.OpenEXR.Tests" />
+  </ItemGroup>
+  
   <ItemGroup>
     <PackageReference Include="SixLabors.ImageSharp" Version="3.0.1" />
   </ItemGroup>

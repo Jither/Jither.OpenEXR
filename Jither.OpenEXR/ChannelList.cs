@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using Jither.OpenEXR.Attributes;
+using System.Collections;
 using System.Diagnostics;
 
 namespace Jither.OpenEXR;
@@ -16,6 +17,8 @@ public class ChannelList : IReadOnlyList<Channel>
     public Channel? this[string name] => channels.SingleOrDefault(c => c.Name == name);
 
     public int Count => channels.Count;
+
+    public bool AreSubsampled => channels.Any(c => c.IsSubsampled);
 
     public static ChannelList CreateRGBHalf(bool linear = false)
     {
@@ -123,6 +126,11 @@ public class ChannelList : IReadOnlyList<Channel>
             writer.WriteInt(channel.YSampling);
         }
         writer.WriteByte(0);
+    }
+
+    public int GetByteCount(V2i area)
+    {
+        return channels.Sum(c => c.GetByteCount(area));
     }
 
     private static bool ReadChannel(EXRReader reader, out Channel? channel, out long bytesRead)

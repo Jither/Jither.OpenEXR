@@ -1,4 +1,5 @@
-﻿using System.Buffers;
+﻿using Jither.OpenEXR.Compression;
+using System.Buffers;
 
 namespace Jither.OpenEXR;
 
@@ -24,9 +25,10 @@ public class EXRPartDataWriter : EXRPartDataHandler
     public void Write(byte[] data)
     {
         int sourceOffset = 0;
-        for (int i = 0; i < chunkCount; i++)
+        for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++)
         {
-            int bytesWritten = InternalWriteBlock(i, data, sourceOffset);
+            int y = chunkIndex * compressor.ScanLinesPerBlock + part.DataWindow.YMin;
+            int bytesWritten = InternalWriteBlock(chunkIndex, y, data, sourceOffset);
             sourceOffset += bytesWritten;
         }
     }
@@ -34,22 +36,24 @@ public class EXRPartDataWriter : EXRPartDataHandler
     public void WriteInterleaved(byte[] data, IEnumerable<string> channelOrder)
     {
         int sourceOffset = 0;
-        for (int i = 0; i < chunkCount; i++)
+        for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++)
         {
-            int bytesWritten = WriteBlockInterleaved(i, data, channelOrder, sourceOffset);
+            int y = chunkIndex * compressor.ScanLinesPerBlock + part.DataWindow.YMin;
+            int bytesWritten = WriteBlockInterleaved(chunkIndex, y, data, channelOrder, sourceOffset);
             sourceOffset += bytesWritten;
         }
     }
 
-    public void WriteBlock(int chunkIndex, byte[] data, int offset = 0)
+    public void WriteBlock(int chunkIndex, int y, byte[] data, int offset = 0)
     {
         CheckWriteCount(chunkIndex, data, offset);
-        InternalWriteBlock(chunkIndex, data, offset);
+        InternalWriteBlock(chunkIndex, y, data, offset);
     }
 
-    public int WriteBlockInterleaved(int chunkIndex, byte[] data, IEnumerable<string> channelOrder, int offset = 0)
+    public int WriteBlockInterleaved(int chunkIndex, int y, byte[] data, IEnumerable<string> channelOrder, int offset = 0)
     {
         CheckWriteCount(chunkIndex, data, offset);
+        CheckInterleavedPrerequisites();
         var pixelData = ArrayPool<byte>.Shared.Rent(GetBlockByteCount(chunkIndex));
         try
         {
@@ -82,12 +86,12 @@ public class EXRPartDataWriter : EXRPartDataHandler
                         {
                             pixelData[destOffset++] = data[sourceOffset + j];
                         }
-                        sourceOffset += BytesPerPixel;
+                        sourceOffset += bytesPerPixel;
                     }
                 }
             }
 
-            return InternalWriteBlock(chunkIndex, pixelData, 0);
+            return InternalWriteBlock(chunkIndex, y, pixelData, 0);
         }
         finally
         {
@@ -95,16 +99,14 @@ public class EXRPartDataWriter : EXRPartDataHandler
         }
     }
 
-    private int InternalWriteBlock(int chunkIndex, byte[] data, int index)
+    private int InternalWriteBlock(int chunkIndex, int y, byte[] data, int index)
     {
-        // TODO: We're assuming INCREASING_Y when writing
         ulong blockOffset = (ulong)writer.Position;
 
         if (isMultiPart)
         {
             writer.WriteInt(chunkIndex);
         }
-        int y = chunkIndex * compressor.ScanLinesPerBlock + part.DataWindow.YMin;
         writer.WriteInt(y);
         long sizeOffset = writer.Position;
         writer.WriteInt(0); // Placeholder
@@ -112,7 +114,8 @@ public class EXRPartDataWriter : EXRPartDataHandler
         int bytesToWrite = GetBlockByteCount(chunkIndex);
         using (var source = new MemoryStream(data, index, bytesToWrite))
         {
-            compressor.Compress(source, dest);
+            var info = new PixelDataInfo(part.Channels, new System.Drawing.Rectangle(0, y, PixelsPerScanLine, GetBlockScanLineCount(chunkIndex)), bytesToWrite);
+            compressor.Compress(source, dest, info);
         }
         
         var size = (int)(writer.Position - sizeOffset - 4);

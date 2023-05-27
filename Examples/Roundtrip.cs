@@ -23,7 +23,7 @@ internal class Roundtrip : Example
             // We need to read the data into memory and write it back to the new file.
             // Normally, we could just use Read (which reads the raw data) rather than
             // ReadInterleaved. Using ReadInterleaved for testing.
-            byte[] pixelData = new byte[part.DataReader.TotalBytes];
+            byte[] pixelData = new byte[part.DataReader.GetTotalByteCount()];
             part.DataReader.ReadInterleaved(pixelData, new[] { "R", "G", "B", "A" });
 
             part.Compression = EXRCompression.RLE;

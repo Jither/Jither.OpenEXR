@@ -1,5 +1,4 @@
 ﻿using System.Buffers;
-using System.IO;
 using System.IO.Compression;
 
 namespace Jither.OpenEXR.Compression;
@@ -8,7 +7,7 @@ public class ZipSCompressor : Compressor
 {
     public override int ScanLinesPerBlock => 1;
 
-    public override void Compress(Stream source, Stream dest)
+    public override CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info)
     {
         int length = (int)source.Length;
         byte[] buffer = ArrayPool<byte>.Shared.Rent(length);
@@ -18,8 +17,10 @@ public class ZipSCompressor : Compressor
             ReorderAndPredict(buffer, length);
             using (var zlib = new ZLibStream(dest, CompressionLevel.Optimal, leaveOpen: true))
             {
+                // TODO: Handle no-gain
                 zlib.Write(buffer, 0, length);
                 //zlib.Flush();
+                return CompressionResult.Success;
             }
         }
         finally
@@ -28,9 +29,9 @@ public class ZipSCompressor : Compressor
         }
     }
 
-    public override void Decompress(Stream source, Stream dest)
+    public override void InternalDecompress(Stream source, Stream dest, PixelDataInfo info)
     {
-        int length = (int)dest.Length;
+        int length = info.UncompressedByteSize;
         byte[] buffer = ArrayPool<byte>.Shared.Rent(length);
         try
         {

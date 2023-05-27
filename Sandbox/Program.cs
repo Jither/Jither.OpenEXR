@@ -1,4 +1,5 @@
 ﻿using Jither.OpenEXR;
+using Jither.OpenEXR.Compression;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -9,7 +10,7 @@ internal class Program
 {
     static void Main(string[] args)
     {
-        using (var file = new EXRFile(args[0]))
+        using (var file = new EXRFile(@"D:\Downloads\piz-f16.exr"))
         {
             Console.WriteLine(JsonSerializer.Serialize(file, new JsonSerializerOptions { WriteIndented = true, Converters = { new JsonStringEnumConverter() } }));
             var partsData = new List<byte[]>();
@@ -17,15 +18,15 @@ internal class Program
             {
                 Debug.Assert(part.DataReader != null);
 
-                var bytes = new byte[part.DataReader.TotalBytes];
+                var bytes = new byte[part.DataReader.GetTotalByteCount()];
                 part.DataReader.Read(bytes);
                 partsData.Add(bytes);
             }
-            
+
             file.ForceVersion2 = true;
-            file.Parts[0].Compression = EXRCompression.RLE;
-            
-            file.Write(@"D:\test-rle.exr");
+            file.Parts[0].Compression = EXRCompression.PIZ;
+
+            file.Write(@"D:\test.exr");
             int partIndex = 0;
             foreach (var part in file.Parts)
             {

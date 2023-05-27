@@ -1,8 +1,20 @@
 {
   "profiles": {
-    "Examples": {
+    "0 - Read File Info": {
+      "commandName": "Project",
+      "commandLineArgs": "0"
+    },
+    "1 - Create and Write": {
+      "commandName": "Project",
+      "commandLineArgs": "1"
+    },
+    "2 - Roundtrip": {
       "commandName": "Project",
       "commandLineArgs": "2"
+    },
+    "WSL": {
+      "commandName": "WSL2",
+      "distributionName": ""
     }
   }
 }

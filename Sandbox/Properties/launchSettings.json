@@ -1,8 +1,7 @@
 {
   "profiles": {
     "Sandbox": {
-      "commandName": "Project",
-      "commandLineArgs": "..\\..\\..\\..\\openexr-images-main\\rle.exr"
+      "commandName": "Project"
     }
   }
 }

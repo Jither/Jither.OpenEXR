@@ -1,4 +1,5 @@
-﻿using System.Buffers;
+﻿using Jither.OpenEXR.Compression;
+using System.Buffers;
 
 namespace Jither.OpenEXR;
 
@@ -37,9 +38,10 @@ public class EXRPartDataReader : EXRPartDataHandler
             throw new ArgumentNullException(nameof(dest));
         }
 
-        if (dest.Length < TotalBytes)
+        var totalBytes = GetTotalByteCount();
+        if (dest.Length < totalBytes)
         {
-            throw new ArgumentException($"Destination array too small ({dest.Length}) to fit pixel data ({TotalBytes})");
+            throw new ArgumentException($"Destination array too small ({dest.Length}) to fit pixel data ({totalBytes})");
         }
 
         int destOffset = 0;
@@ -57,9 +59,11 @@ public class EXRPartDataReader : EXRPartDataHandler
             throw new ArgumentNullException(nameof(dest));
         }
 
+        int offset = 0;
         for (int i = 0; i < chunkCount; i++)
         {
-            ReadBlockInterleaved(i, dest, channelOrder, i * BytesPerBlock);
+            int bytesRead = ReadBlockInterleaved(i, dest, channelOrder, offset);
+            offset += bytesRead;
         }
     }
 
@@ -68,8 +72,10 @@ public class EXRPartDataReader : EXRPartDataHandler
         InternalReadBlock(chunkIndex, dest, destOffset);
     }
 
-    public void ReadBlockInterleaved(int chunkIndex, byte[] dest, IEnumerable<string> channelOrder, int offset = 0)
+    public int ReadBlockInterleaved(int chunkIndex, byte[] dest, IEnumerable<string> channelOrder, int offset = 0)
     {
+        CheckInterleavedPrerequisites();
+
         // Offsets are always ordered with scanlines from top to bottom (INCREASING_Y). However, the order of the scanlines themselves within the file
         // may be bottom to top or random (see LineOrder). Each block stores its first scanline's y coordinate, meaning it's possible to
         // read blocks in file sequential order and reconstruct the scanline order - avoiding file seeks. For now, we just follow the
@@ -81,7 +87,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         var data = ArrayPool<byte>.Shared.Rent(GetBlockByteCount(chunkIndex));
         try
         {
-            InternalReadBlock(chunkIndex, data, 0);
+            int bytesRead = InternalReadBlock(chunkIndex, data, 0);
 
             // The decompressed pixel data is stored with channels separated and ordered alphabetically
             int sourceOffset = 0;
@@ -116,6 +122,8 @@ public class EXRPartDataReader : EXRPartDataHandler
                     }
                 }
             }
+
+            return bytesRead;
         }
         finally
         {
@@ -123,7 +131,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
     }
 
-    private int InternalReadBlock(int chunkIndex, byte[] dest, int index)
+    private int InternalReadBlock(int chunkIndex, byte[] dest, int destIndex)
     {
         var offset = OffsetTable[chunkIndex];
         reader.Seek((long)offset);
@@ -133,9 +141,18 @@ public class EXRPartDataReader : EXRPartDataHandler
 
         var chunkStream = reader.GetChunkStream(pixelDataSize);
         int bytesToRead = GetBlockByteCount(chunkIndex);
-        using (var destStream = new MemoryStream(dest, index, bytesToRead))
+        using (var destStream = new MemoryStream(dest, destIndex, bytesToRead))
         {
-            compressor.Decompress(chunkStream, destStream);
+            // Yes, compressors could use the length or capacity of the stream rather than
+            // an explicit expectedBytes parameter, but not sure if we'll change this
+            // implementation in the future.
+            var info = new PixelDataInfo(
+                part.Channels, 
+                new System.Drawing.Rectangle(0, y, PixelsPerScanLine, GetBlockScanLineCount(chunkIndex)),
+                bytesToRead
+            );
+
+            compressor.Decompress(chunkStream, destStream, info);
         }
 
         return bytesToRead;

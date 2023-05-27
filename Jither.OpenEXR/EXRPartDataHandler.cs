@@ -9,14 +9,31 @@ public abstract class EXRPartDataHandler
     protected readonly int chunkCount;
     protected readonly bool isMultiPart;
 
-
     protected int PixelsPerScanLine => part.DataWindow.Width;
-    protected int BytesPerPixel => part.Channels.Sum(c => c.Type.GetBytesPerPixel());
-    protected int BitsPerPixel => BytesPerPixel * 8;
 
-    protected int BytesPerBlock => compressor.ScanLinesPerBlock * part.DataWindow.Width * BytesPerPixel;
+    public int GetTotalByteCount()
+    {
+        if (chunkCount > 1)
+        {
+            // <chunkCount> full blocks + possibly smaller last block
+            return GetBlockByteCount(0) * (chunkCount - 1) + GetBlockByteCount(chunkCount - 1);
+        }
+        return GetBlockByteCount(0);
+    }
 
-    public int TotalBytes => part.DataWindow.Width * part.DataWindow.Height * BytesPerPixel;
+    protected void CheckInterleavedPrerequisites()
+    {
+        if (part.Channels.AreSubsampled)
+        {
+            throw new NotSupportedException($"Interleaved read/write is not supported with subsampled channels.");
+        }
+    }
+
+    protected int GetBlockByteCount(int chunkIndex)
+    {
+        var scanlines = GetBlockScanLineCount(chunkIndex);
+        return part.Channels.GetByteCount(new Attributes.V2i(PixelsPerScanLine, scanlines));
+    }
 
     protected int GetBlockScanLineCount(int chunkIndex)
     {
@@ -37,11 +54,6 @@ public abstract class EXRPartDataHandler
     {
         int scanlines = GetBlockScanLineCount(chunkIndex);
         return part.DataWindow.Width * scanlines;
-    }
-
-    protected int GetBlockByteCount(int chunkIndex)
-    {
-        return chunkIndex < chunkCount - 1 ? BytesPerBlock : Math.Min(BytesPerBlock, GetBlockPixelCount(chunkCount - 1) * BytesPerPixel);
     }
 
     protected EXRPartDataHandler(EXRPart part, EXRVersion version)

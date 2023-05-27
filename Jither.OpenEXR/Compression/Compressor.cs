@@ -10,9 +10,41 @@ namespace Jither.OpenEXR.Compression;
 public abstract class Compressor
 {
     public abstract int ScanLinesPerBlock { get; }
-    public abstract void Decompress(Stream source, Stream dest);
-    public abstract void Compress(Stream source, Stream dest);
 
+    public void Compress(Stream source, Stream dest, PixelDataInfo info)
+    {
+        if (InternalCompress(source, dest, info) != CompressionResult.Success)
+        {
+            if (this is not NullCompressor)
+            {
+                // Write uncompressed, e.g. if compression turns out to actually inflate the data.
+                source.Position = 0;
+                NullCompressor.Instance.Compress(source, dest, info);
+            }
+        }
+    }
+
+    public void Decompress(Stream source, Stream dest, PixelDataInfo info)
+    {
+        if (this is not NullCompressor && source.Length == info.UncompressedByteSize)
+        {
+            // If compression actually turns out to inflate the data, the block will be written uncompressed instead.
+            // There is no indication of this, other than the compressed data being the same size as the decompressed
+            // data. Note that although uncompressed data is conceptually handled 1 scanline at a time, as opposed to
+            // some of the compression methods, e.g. 16 scanlines of combined uncompressed data will look identical
+            // to 16 "individually uncompressed" scanlines.
+            NullCompressor.Instance.Decompress(source, dest, info);
+        }
+        else
+        {
+            InternalDecompress(source, dest, info);
+        }
+    }
+
+    public abstract CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info);
+
+    public abstract void InternalDecompress(Stream source, Stream dest, PixelDataInfo info);
+    
     protected static void UnpredictAndReorder(byte[] buffer, int length)
     {
         byte[] temp = ArrayPool<byte>.Shared.Rent(length);
