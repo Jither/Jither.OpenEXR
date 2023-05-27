@@ -21,7 +21,7 @@ TODO
 
 * Probably integration with ImageSharp.
 
-* Support for deep data.
+* Possibly support for deep data.
 
 * Optimization
 

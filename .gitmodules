@@ -1,0 +1,3 @@
+[submodule "Jither.OpenEXR.Tests/images/openexr-images"]
+	path = Jither.OpenEXR.Tests/images/openexr-images
+	url = https://github.com/AcademySoftwareFoundation/openexr-images.git
