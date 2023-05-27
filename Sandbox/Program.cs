@@ -10,7 +10,7 @@ internal class Program
 {
     static void Main(string[] args)
     {
-        using (var file = new EXRFile(@"D:\Downloads\piz-f16.exr"))
+        using (var file = new EXRFile(@"D:\helmet-uncompressed.exr"))
         {
             Console.WriteLine(JsonSerializer.Serialize(file, new JsonSerializerOptions { WriteIndented = true, Converters = { new JsonStringEnumConverter() } }));
             var partsData = new List<byte[]>();
@@ -24,9 +24,9 @@ internal class Program
             }
 
             file.ForceVersion2 = true;
-            file.Parts[0].Compression = EXRCompression.PIZ;
+            file.Parts[0].Compression = EXRCompression.RLE;
 
-            file.Write(@"D:\test.exr");
+            file.Write(@"D:\helmet-rle.exr");
             int partIndex = 0;
             foreach (var part in file.Parts)
             {

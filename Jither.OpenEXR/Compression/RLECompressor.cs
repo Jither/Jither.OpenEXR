@@ -19,7 +19,7 @@ public class RLECompressor : Compressor
         int destIndex = 0;
         try
         {
-            source.Read(uncompressed);
+            source.Read(uncompressed, 0, length);
             ReorderAndPredict(uncompressed, length);
 
             int runs = 0;
@@ -76,10 +76,12 @@ public class RLECompressor : Compressor
                 rune++;
             }
 
+            dest.Write(compressed, 0, destIndex);
             return CompressionResult.Success;
         }
         finally
         {
+            ArrayPool<byte>.Shared.Return(compressed);
             ArrayPool<byte>.Shared.Return(uncompressed);
         }
     }
