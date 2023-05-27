@@ -1,4 +1,4 @@
-﻿using System.Buffers;
+using System.Buffers;
 
 namespace Jither.OpenEXR.Compression;
 
@@ -252,7 +252,7 @@ public class PizTests
         var uncompressed = UNCOMPRESSED_ARRAY_SPECIAL;
         var compressed = HuffmanCoding.Compress(uncompressed);
         ushort[] decompressed = new ushort[uncompressed.Length];
-        HuffmanCoding.Decompress(compressed, decompressed);
+        HuffmanCoding.Decompress(compressed, decompressed, compressed.Length);
         Assert.Equal(uncompressed, decompressed);
     }
 
@@ -262,7 +262,7 @@ public class PizTests
         var uncompressed = new ushort[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
         var compressed = HuffmanCoding.Compress(uncompressed);
         ushort[] decompressed = new ushort[uncompressed.Length];
-        HuffmanCoding.Decompress(compressed, decompressed);
+        HuffmanCoding.Decompress(compressed, decompressed, compressed.Length);
         Assert.Equal(uncompressed, decompressed);
     }
 

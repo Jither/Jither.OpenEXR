@@ -4,3 +4,5 @@ bin/
 obj/
 openexr-images-main/
 
+# Used for debugging image generation
+Jither.OpenEXR.Tests/images/out

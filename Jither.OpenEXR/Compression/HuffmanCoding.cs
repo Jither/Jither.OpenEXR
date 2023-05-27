@@ -79,7 +79,7 @@ public static class HuffmanCoding
         }
     }
 
-    public static void Decompress(byte[] compressed, Span<ushort> decompressed)
+    public static void Decompress(byte[] compressed, Span<ushort> decompressed, int compressedByteSize)
     {
         const int headerSize = 5 * sizeof(uint);
 
@@ -95,21 +95,18 @@ public static class HuffmanCoding
             throw new PizHuffmanException("Invalid table size");
         }
 
-        int dataSize = compressed.Length - headerSize;
-        if ((bitCount + 7) / 8 > dataSize)
+        int compressedDataSize = compressedByteSize - headerSize;
+        int byteCount = (int)((bitCount + 7) / 8);
+        if (byteCount > compressedDataSize)
         {
-            throw new PizHuffmanException($"Declared bitcount ({bitCount}) does not fit in Huffman table+data length ({dataSize})");
+            throw new PizHuffmanException($"Declared bitcount ({bitCount} bits = {byteCount} bytes) does not fit in Huffman table+data length ({compressedDataSize} bytes)");
         }
 
-        using (var stream = new MemoryStream(compressed))
+        using (var stream = new MemoryStream(compressed, 0, compressedByteSize))
         {
             stream.Position = headerSize;
             var compressedBits = new BitStreamer(stream);
             var encodingTable = UnpackEncodingTable(compressedBits, minIndex, maxIndex);
-            if (bitCount > 8 * compressedBits.RemainingBytes)
-            {
-                throw new PizHuffmanException($"Declared bitcount ({bitCount}) does not fit in Huffman byte length ({dataSize})");
-            }
             var decodingTable = BuildDecodingTable(encodingTable, minIndex, maxIndex);
 
             Decode(encodingTable, decodingTable, compressedBits, decompressed, bitCount, maxIndex);
@@ -332,7 +329,6 @@ public static class HuffmanCoding
             {
                 return Index - other.Index;
             }
-            // Using 1 : -1 rather than subtracting, because we may want unsigned in future.
             return Frequency > other.Frequency ? 1 : -1;
         }
     }
@@ -352,40 +348,48 @@ public static class HuffmanCoding
     //	- see http://www.compressconsult.com/huffman/
     private static void BuildCanonicalCodeTable(ulong[] hcode)
     {
-        ulong[] countByCode = new ulong[59];
-
-        // For each i from 0 through 58, count the
-        // number of different codes of length i, and
-        // store the count in n[i].
-        for (int i = 0; i < HUF_ENCSIZE; i++)
+        ulong[] countByCode = ArrayPool<ulong>.Shared.Rent(59);
+        try
         {
-            countByCode[hcode[i]]++;
-        }
+            Array.Fill(countByCode, 0u);
 
-        // For each i from 58 through 1, compute the
-        // numerically lowest code with length i, and
-        // store that code in n[i].
-
-        ulong code = 0;
-        for (int i = 58; i > 0; i--)
-        {
-            ulong nextCode = (code + countByCode[i]) >> 1;
-            countByCode[i] = code;
-            code = nextCode;
-        }
-
-        // hcode[i] contains the length, l, of the
-        // code for symbol i.  Assign the next available
-        // code of length l to the symbol and store both
-        // l and the code in hcode[i].
-        for (int i = 0; i < HUF_ENCSIZE; i++)
-        {
-            ulong currentLength = hcode[i];
-            if (currentLength > 0)
+            // For each i from 0 through 58, count the
+            // number of different codes of length i, and
+            // store the count in n[i].
+            for (int i = 0; i < HUF_ENCSIZE; i++)
             {
-                hcode[i] = currentLength | (countByCode[currentLength] << 6);
-                countByCode[currentLength]++;
+                countByCode[hcode[i]]++;
             }
+
+            // For each i from 58 through 1, compute the
+            // numerically lowest code with length i, and
+            // store that code in n[i].
+
+            ulong code = 0;
+            for (int i = 58; i > 0; i--)
+            {
+                ulong nextCode = (code + countByCode[i]) >> 1;
+                countByCode[i] = code;
+                code = nextCode;
+            }
+
+            // hcode[i] contains the length, l, of the
+            // code for symbol i.  Assign the next available
+            // code of length l to the symbol and store both
+            // l and the code in hcode[i].
+            for (int i = 0; i < HUF_ENCSIZE; i++)
+            {
+                ulong currentLength = hcode[i];
+                if (currentLength > 0)
+                {
+                    hcode[i] = currentLength | (countByCode[currentLength] << 6);
+                    countByCode[currentLength]++;
+                }
+            }
+        }
+        finally
+        {
+            ArrayPool<ulong>.Shared.Return(countByCode);
         }
     }
 
@@ -427,7 +431,7 @@ public static class HuffmanCoding
 
             if (frequencies[i] != 0)
             {
-                heap[count++] = i; // &frq[i]
+                heap[count++] = i;
                 max = i;
             }
         }
@@ -484,7 +488,6 @@ public static class HuffmanCoding
             var secondSmallestIndex = secondSmallest.Index;
 
             binHeap.Push(new HeapFrequency(secondSmallestIndex, smallest.Frequency + secondSmallest.Frequency));
-            //secondSmallest.Frequency += smallest.Frequency;
 
             // The entries in scode are linked into lists with the
             // entries in hlink serving as "next" pointers and with

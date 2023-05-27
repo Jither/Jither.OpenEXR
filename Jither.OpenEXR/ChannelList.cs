@@ -161,7 +161,10 @@ public class ChannelList : IReadOnlyList<Channel>
 
     private void UpdateSorting()
     {
-        channels.Sort((a, b) => a.Name.CompareTo(b.Name));
+        // OpenEXR specifies that "Channels are stored in alphabetical order, according to channel names" [within the pixel data]
+        // This actually also applies to the channel list attributes - and the actual sorting is ordinal (and case sensitive) - i.e.,
+        // R < r
+        channels.Sort((a, b) => String.Compare(a.Name, b.Name, StringComparison.Ordinal));
     }
 
     public IEnumerator<Channel> GetEnumerator()

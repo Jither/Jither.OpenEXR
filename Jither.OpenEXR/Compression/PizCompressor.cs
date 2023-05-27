@@ -51,15 +51,16 @@ public class PizCompressor : Compressor
             source.ReadExactly(uncompressedScanlineBytes, 0, info.UncompressedByteSize);
 
             var channelInfos = CreateChannelInfos(info);
+            int uncompressedUShortSize = info.UncompressedByteSize / 2;
 
             // PIZ uncompressed data should store all scanlines for each channel consecutively -
             // e.g. A for all scanlines, followed by B for all scanlines, followed by G, followed by R.
             // Here we do the rearrangement:
-            var uncompressedArray = ArrayPool<ushort>.Shared.Rent(info.UncompressedByteSize / 2);
+            var uncompressedArray = ArrayPool<ushort>.Shared.Rent(uncompressedUShortSize);
             try
             {
                 // The array may (mostly will) not be the size of the data. We use a span over the exact size for convenience
-                var uncompressed = uncompressedArray.AsSpan(0, info.UncompressedByteSize / 2);
+                var uncompressed = uncompressedArray.AsSpan(0, uncompressedUShortSize);
 
                 int nextByteOffset = 0;
                 for (int y = info.Bounds.Top; y < info.Bounds.Bottom; y++)
@@ -84,6 +85,8 @@ public class PizCompressor : Compressor
                 try
                 {
                     var bitmap = bitmapArray.AsSpan(0, BITMAP_SIZE);
+                    // Bitmap is sparsely populated, so need to clear it before use
+                    bitmap.Fill(0);
 
                     (var minNonZero, var maxNonZero) = BitmapFromData(uncompressed, bitmap);
                     ushort[] lutArray = ArrayPool<ushort>.Shared.Rent(LUT_SIZE);
@@ -159,15 +162,16 @@ public class PizCompressor : Compressor
     public override void InternalDecompress(Stream source, Stream dest, PixelDataInfo info)
     {
         // TODO: Bit of a nested nightmare here, due to ArrayPool returns.
+        int uncompressedUShortSize = info.UncompressedByteSize / 2;
 
         var lutArray = ArrayPool<ushort>.Shared.Rent(LUT_SIZE);
         try
         {
-            var decompressedArray = ArrayPool<ushort>.Shared.Rent(info.UncompressedByteSize);
+            var decompressedArray = ArrayPool<ushort>.Shared.Rent(uncompressedUShortSize);
             try
             {
                 var lut = lutArray.AsSpan(0, LUT_SIZE);
-                var decompressed = decompressedArray.AsSpan(0, info.UncompressedByteSize);
+                var decompressed = decompressedArray.AsSpan(0, uncompressedUShortSize);
 
                 // Read data:
 
@@ -197,7 +201,7 @@ public class PizCompressor : Compressor
                 ApplyLUT(lut, decompressed);
 
                 // TODO: Handle Big Endian
-                var decompressedAsBytes = MemoryMarshal.AsBytes<ushort>(decompressed);
+                var decompressedAsBytes = MemoryMarshal.AsBytes(decompressed);
 
                 // The uncompressed PIZ data stores all scanlines for each channel consecutively -
                 // e.g. A for all scanlines, followed by B for all scanlines, followed by G, followed by R.
@@ -267,16 +271,16 @@ public class PizCompressor : Compressor
                     source.ReadExactly(bitmap, minNonZeroIndex, maxNonZeroIndex - minNonZeroIndex + 1);
                 }
 
-                int dataSize = reader.ReadInt32();
+                int compressedByteSize = reader.ReadInt32();
 
-                byte[] compressed = ArrayPool<byte>.Shared.Rent(dataSize);
+                byte[] compressed = ArrayPool<byte>.Shared.Rent(compressedByteSize);
                 try
                 {
-                    reader.Read(compressed, 0, dataSize);
+                    reader.Read(compressed, 0, compressedByteSize);
 
                     var maxValue = ReverseLUTFromBitmap(bitmap, lut);
 
-                    HuffmanCoding.Decompress(compressed, decompressed);
+                    HuffmanCoding.Decompress(compressed, decompressed, compressedByteSize);
 
                     return maxValue;
                 }

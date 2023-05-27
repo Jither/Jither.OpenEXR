@@ -15,11 +15,19 @@ public class ZipSCompressor : Compressor
         {
             source.Read(buffer);
             ReorderAndPredict(buffer, length);
-            using (var zlib = new ZLibStream(dest, CompressionLevel.Optimal, leaveOpen: true))
+            using (var intermediary = new MemoryStream())
             {
-                // TODO: Handle no-gain
-                zlib.Write(buffer, 0, length);
-                //zlib.Flush();
+                using (var zlib = new ZLibStream(intermediary, CompressionLevel.Optimal, leaveOpen: true))
+                {
+                    zlib.Write(buffer, 0, length);
+                }
+
+                if (intermediary.Position >= info.UncompressedByteSize)
+                {
+                    return CompressionResult.NoGain;
+                }
+                intermediary.Position = 0;
+                intermediary.CopyTo(dest);
                 return CompressionResult.Success;
             }
         }
@@ -37,18 +45,9 @@ public class ZipSCompressor : Compressor
         {
             using (var zlib = new ZLibStream(source, CompressionMode.Decompress, leaveOpen: true))
             {
-                // zlib.Read(buffer) isn't guaranteed to read the full stream.
-                int totalRead = 0;
-                while (totalRead < buffer.Length)
-                {
-                    int bytesRead = zlib.Read(buffer, totalRead, buffer.Length - totalRead);
-                    if (bytesRead == 0)
-                    {
-                        break;
-                    }
-                    totalRead += bytesRead;
-                }
+                zlib.ReadExactly(buffer, 0, length);
             }
+
             UnpredictAndReorder(buffer, length);
             dest.Write(buffer, 0, length);
         }
