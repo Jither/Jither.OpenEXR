@@ -15,14 +15,16 @@ Current state
 
 TODO
 ----
-* API finalization (or even making it just barely useful). Currently, the API is very low level, requiring the user to know the OpenEXR spec, and handling color spaces and pixel formats themselves. It also doesn't yet help with creating images from scratch - focus has been on reading, modifying, and writing back existing images.
+* API finalization (or even making it just barely useful). Currently, the API is very low level, requiring the user to know the OpenEXR spec, and handling color spaces and pixel formats themselves.
 
 * Support for tiled images.
 
+* Probably integration with ImageSharp.
+
 * Support for deep data.
 
-* Tests - and testing. 🤪
+* Optimization
 
-* Possibly integration with ImageSharp.
+* Tests - and testing. 🤪
 
 There are no plans to support the lossy compression schemes (PXR24, B44/B44A, DWAA/DWAB).
