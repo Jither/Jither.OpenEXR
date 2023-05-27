@@ -11,6 +11,7 @@ Current state
 * Any channel setup (i.e. including custom channels)
 * Sub-sampling support
 * Supports all attributes
+* Single or multi-part
 * Scanline images only for now
 
 TODO
