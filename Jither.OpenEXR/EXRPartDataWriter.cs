@@ -28,7 +28,8 @@ public class EXRPartDataWriter : EXRPartDataHandler
         for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++)
         {
             int y = chunkIndex * compressor.ScanLinesPerChunk + part.DataWindow.YMin;
-            int bytesWritten = InternalWriteChunk(chunkIndex, y, data, sourceOffset);
+            var chunkInfo = new ScanlineChunkInfo(chunkIndex, part.PartNumber, y);
+            int bytesWritten = InternalWriteChunk(chunkInfo, data, sourceOffset);
             sourceOffset += bytesWritten;
         }
     }
@@ -39,29 +40,30 @@ public class EXRPartDataWriter : EXRPartDataHandler
         for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++)
         {
             int y = chunkIndex * compressor.ScanLinesPerChunk + part.DataWindow.YMin;
-            int bytesWritten = WriteChunkInterleaved(chunkIndex, y, data, channelOrder, sourceOffset);
+            var chunkInfo = new ScanlineChunkInfo(chunkIndex, part.PartNumber, y);
+            int bytesWritten = WriteChunkInterleaved(chunkInfo, data, channelOrder, sourceOffset);
             sourceOffset += bytesWritten;
         }
     }
 
-    public void WriteChunk(int chunkIndex, int y, byte[] data, int offset = 0)
+    public void WriteChunk(ChunkInfo chunkInfo, byte[] data, int offset = 0)
     {
-        CheckWriteCount(chunkIndex, data, offset);
-        InternalWriteChunk(chunkIndex, y, data, offset);
+        CheckWriteCount(chunkInfo, data, offset);
+        InternalWriteChunk(chunkInfo, data, offset);
     }
 
-    public int WriteChunkInterleaved(int chunkIndex, int y, byte[] data, IEnumerable<string> channelOrder, int offset = 0)
+    public int WriteChunkInterleaved(ChunkInfo chunkInfo, byte[] data, IEnumerable<string> channelOrder, int offset = 0)
     {
-        CheckWriteCount(chunkIndex, data, offset);
+        CheckWriteCount(chunkInfo, data, offset);
         CheckInterleavedPrerequisites();
-        var pixelData = ArrayPool<byte>.Shared.Rent(GetChunkByteCount(chunkIndex));
+        var pixelData = ArrayPool<byte>.Shared.Rent(GetChunkByteCount(chunkInfo));
         try
         {
             // Rearrange chunk from pixel interleaved channels into scanline interleaved channels
             var sourceOffsets = GetInterleaveOffsets(channelOrder, out var bytesPerPixel, allChannelsRequired: true);
 
             int destOffset = 0;
-            int scanlineCount = GetChunkScanLineCount(chunkIndex);
+            int scanlineCount = GetChunkScanLineCount(chunkInfo);
             for (int scanline = 0; scanline < scanlineCount; scanline++)
             {
                 int channelIndex = 0;
@@ -91,7 +93,7 @@ public class EXRPartDataWriter : EXRPartDataHandler
                 }
             }
 
-            return InternalWriteChunk(chunkIndex, y, pixelData, 0);
+            return InternalWriteChunk(chunkInfo, pixelData, 0);
         }
         finally
         {
@@ -99,41 +101,72 @@ public class EXRPartDataWriter : EXRPartDataHandler
         }
     }
 
-    private int InternalWriteChunk(int chunkIndex, int y, byte[] data, int index)
+    private int InternalWriteChunk(ChunkInfo chunkInfo, byte[] data, int dataIndex)
     {
-        ulong chunkOffset = (ulong)writer.Position;
+        chunkInfo.FileOffset = writer.Position;
 
-        if (isMultiPart)
-        {
-            writer.WriteInt(part.PartNumber);
-        }
-        writer.WriteInt(y);
-        long sizeOffset = writer.Position;
-        writer.WriteInt(0); // Placeholder
+        long sizeOffset = WriteChunkHeader(chunkInfo);
+
         var dest = writer.GetStream();
-        int bytesToWrite = GetChunkByteCount(chunkIndex);
-        using (var source = new MemoryStream(data, index, bytesToWrite))
+        chunkInfo.UncompressedByteCount = GetChunkByteCount(chunkInfo);
+
+        using (var source = new MemoryStream(data, dataIndex, chunkInfo.UncompressedByteCount))
         {
-            var info = new PixelDataInfo(part.Channels, new System.Drawing.Rectangle(0, y, PixelsPerScanLine, GetChunkScanLineCount(chunkIndex)), bytesToWrite);
+            var info = new PixelDataInfo(
+                part.Channels,
+                GetBounds(chunkInfo),
+                chunkInfo.UncompressedByteCount
+            );
             compressor.Compress(source, dest, info);
         }
-        
+
         var size = (int)(writer.Position - sizeOffset - 4);
         writer.Seek(sizeOffset);
         writer.WriteInt(size);
 
-        writer.Seek(offsetTableOffset + chunkIndex * 8);
-        writer.WriteULong(chunkOffset);
+        writer.Seek(offsetTableOffset + chunkInfo.Index * 8);
+        writer.WriteULong((ulong)chunkInfo.FileOffset);
 
         writer.Seek(0, SeekOrigin.End);
 
-        return bytesToWrite;
+        return chunkInfo.UncompressedByteCount;
     }
 
-    private void CheckWriteCount(int chunkIndex, byte[] data, int index)
+    private long WriteChunkHeader(ChunkInfo chunkInfo)
+    {
+        if (isMultiPart)
+        {
+            writer.WriteInt(chunkInfo.PartNumber);
+        }
+
+        if (IsTiled)
+        {
+            if (chunkInfo is not TileChunkInfo tileInfo)
+            {
+                throw new EXRFormatException($"Expected tile chunk info for {chunkInfo}");
+            }
+            writer.WriteInt(tileInfo.X);
+            writer.WriteInt(tileInfo.Y);
+            writer.WriteInt(tileInfo.LevelX);
+            writer.WriteInt(tileInfo.LevelY);
+        }
+        else
+        {
+            if (chunkInfo is not ScanlineChunkInfo scanlineInfo)
+            {
+                throw new EXRFormatException($"Expected scanline chunk info for {chunkInfo}");
+            }
+            writer.WriteInt(scanlineInfo.Y);
+        }
+        long sizeOffset = writer.Position;
+        writer.WriteInt(0); // Placeholder
+        return sizeOffset;
+    }
+
+    private void CheckWriteCount(ChunkInfo chunkInfo, byte[] data, int index)
     {
         int count = data.Length - index;
-        int expected = GetChunkByteCount(chunkIndex);
+        int expected = GetChunkByteCount(chunkInfo);
         if (count < expected)
         {
             throw new ArgumentException($"Expected chunk to write to be {expected} bytes, but got array (+ index) with {count} bytes", nameof(data));

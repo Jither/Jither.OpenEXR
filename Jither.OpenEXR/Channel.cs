@@ -1,4 +1,5 @@
 ﻿using Jither.OpenEXR.Attributes;
+using Jither.OpenEXR.Drawing;
 
 namespace Jither.OpenEXR;
 
@@ -75,18 +76,6 @@ public class Channel
 
     public bool IsSubsampled => XSampling != 1 || YSampling != 1;
 
-    public Channel(string name, EXRDataType type, PerceptualTreatment perceptualTreatment, byte reserved0, byte reserved1, byte reserved2, int xSampling, int ySampling)
-    {
-        Name = name;
-        Type = type;
-        PerceptualTreatment = perceptualTreatment;
-        Reserved0 = reserved0;
-        Reserved1 = reserved1;
-        Reserved2 = reserved2;
-        XSampling = xSampling;
-        YSampling = ySampling;
-    }
-
     public Channel(string name, EXRDataType type, PerceptualTreatment perceptualTreatment, int xSampling = 1, int ySampling = 1)
     {
         Name = name;
@@ -99,19 +88,32 @@ public class Channel
         YSampling = ySampling;
     }
 
+    internal Channel(string name, EXRDataType type, PerceptualTreatment perceptualTreatment, byte reserved0, byte reserved1, byte reserved2, int xSampling, int ySampling)
+    {
+        Name = name;
+        Type = type;
+        PerceptualTreatment = perceptualTreatment;
+        Reserved0 = reserved0;
+        Reserved1 = reserved1;
+        Reserved2 = reserved2;
+        XSampling = xSampling;
+        YSampling = ySampling;
+    }
+
     /// <summary>
     /// Returns the number of pixels sampled in the channel for a given area (e.g. a block or tile)
     /// </summary>
     /// <returns></returns>
-    public V2i GetSubsampledResolution(V2i area)
+    public Dimensions<int> GetSubsampledResolution(Bounds<int> area)
     {
-        return new V2i(area.X / XSampling, area.Y / YSampling);
+        // TODO: This isn't actually accurate. Consider an area from y = 2 to y = 4 with YSampling = 5, which would only sample y = 0 and y = 5
+        return new Dimensions<int>(area.Width / XSampling, area.Width / YSampling);
     }
 
     /// <summary>
     /// Returns the number of bytes occupied by the channel for a given area, taking into account sub-sampling and value type (16-bit or 32-bit).
     /// </summary>
-    public int GetByteCount(V2i area)
+    public int GetByteCount(Bounds<int> area)
     {
         return GetSubsampledResolution(area).Area * Type.GetBytesPerPixel();
     }

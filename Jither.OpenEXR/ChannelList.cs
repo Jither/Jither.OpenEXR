@@ -1,4 +1,5 @@
 ﻿using Jither.OpenEXR.Attributes;
+using Jither.OpenEXR.Drawing;
 using System.Collections;
 using System.Diagnostics;
 
@@ -15,6 +16,8 @@ public class ChannelList : IReadOnlyList<Channel>
     public Channel this[int index] => channels[index];
 
     public Channel? this[string name] => channels.SingleOrDefault(c => c.Name == name);
+
+    public IEnumerable<string> Names => channels.Select(c => c.Name);
 
     public int Count => channels.Count;
 
@@ -128,7 +131,7 @@ public class ChannelList : IReadOnlyList<Channel>
         writer.WriteByte(0);
     }
 
-    public int GetByteCount(V2i area)
+    public int GetByteCount(Bounds<int> area)
     {
         return channels.Sum(c => c.GetByteCount(area));
     }

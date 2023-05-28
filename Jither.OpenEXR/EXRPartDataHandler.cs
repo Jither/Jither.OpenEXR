@@ -1,4 +1,8 @@
-﻿using Jither.OpenEXR.Compression;
+﻿using Jither.OpenEXR.Attributes;
+using Jither.OpenEXR.Compression;
+using Jither.OpenEXR.Drawing;
+using Jither.OpenEXR.Helpers;
+using System.Drawing;
 
 namespace Jither.OpenEXR;
 
@@ -11,14 +15,13 @@ public abstract class EXRPartDataHandler
 
     protected int PixelsPerScanLine => part.DataWindow.Width;
 
+    /// <summary>
+    /// Returns the number of bytes needed to contain the part's complete pixel data
+    /// </summary>
     public int GetTotalByteCount()
     {
-        if (chunkCount > 1)
-        {
-            // <chunkCount> full chunks + possibly smaller last chunk
-            return GetChunkByteCount(0) * (chunkCount - 1) + GetChunkByteCount(chunkCount - 1);
-        }
-        return GetChunkByteCount(0);
+        var bounds = part.DataWindow.ToBounds();
+        return part.Channels.GetByteCount(bounds);
     }
 
     protected void CheckInterleavedPrerequisites()
@@ -29,15 +32,15 @@ public abstract class EXRPartDataHandler
         }
     }
 
-    protected int GetChunkByteCount(int chunkIndex)
+    protected int GetChunkByteCount(ChunkInfo chunkInfo)
     {
-        var scanlines = GetChunkScanLineCount(chunkIndex);
-        return part.Channels.GetByteCount(new Attributes.V2i(PixelsPerScanLine, scanlines));
+        var bounds = GetBounds(chunkInfo);
+        return part.Channels.GetByteCount(bounds);
     }
 
-    protected int GetChunkScanLineCount(int chunkIndex)
+    protected int GetChunkScanLineCount(ChunkInfo chunkInfo)
     {
-        if (chunkIndex < chunkCount - 1)
+        if (chunkInfo.Index < chunkCount - 1)
         {
             return compressor.ScanLinesPerChunk;
         }
@@ -50,10 +53,29 @@ public abstract class EXRPartDataHandler
         return scanlines;
     }
 
-    protected int GetChunkPixelCount(int chunkIndex)
+    protected int GetChunkPixelCount(ChunkInfo chunkInfo)
     {
-        int scanlines = GetChunkScanLineCount(chunkIndex);
+        int scanlines = GetChunkScanLineCount(chunkInfo);
         return part.DataWindow.Width * scanlines;
+    }
+
+    protected bool IsTiled => part.IsTiled;
+
+    protected Bounds<int> GetBounds(ChunkInfo chunkInfo)
+    {
+        if (chunkInfo is ScanlineChunkInfo scanline)
+        {
+            return new Bounds<int>(0, scanline.Y, PixelsPerScanLine, GetChunkScanLineCount(chunkInfo));
+        }
+        else if (chunkInfo is TileChunkInfo tile)
+        {
+            var tileDesc = part.Tiles ?? throw new InvalidOperationException($"Expected part to have a tiles attribute.");
+            var dataWindow = part.DataWindow;
+            int width = Math.Min(tileDesc.XSize, dataWindow.Width - tile.X);
+            int height = Math.Min(tileDesc.YSize, dataWindow.Height - tile.Y);
+            return new Bounds<int>(tile.X, tile.Y, width, height);
+        }
+        throw new NotImplementedException($"Expected chunk info to be scanline or tile");
     }
 
     protected EXRPartDataHandler(EXRPart part, EXRVersion version)
@@ -78,12 +100,22 @@ public abstract class EXRPartDataHandler
         }
         else if (version.IsSinglePartTiled)
         {
-            // TODO: offsetTable for single part tiled
-            throw new NotImplementedException($"Reading of single part tiled images is not implemented.");
+            var tiles = part.Tiles ?? throw new EXRFormatException($"Missing tiles attribute for single tiled part");
+            // "In a file with multiple levels, tiles have the same size, regardless of their level. Lower-resolution levels contain fewer, rather than smaller, tiles."
+            // So, we need to figure out the number of tiles required to cover DataWindow at each level.
+            chunkCount = 0;
+            int totalWidth = part.DataWindow.Width;
+            int totalHeight = part.DataWindow.Height;
+            foreach (var coverage in tiles.Coverages)
+            {
+                chunkCount += MathHelpers.DivAndRoundUp(totalWidth, coverage.Width) * MathHelpers.DivAndRoundUp(totalHeight, coverage.Height);
+            }
         }
         else
         {
-            chunkCount = (int)Math.Ceiling((double)part.DataWindow.Height / compressor.ScanLinesPerChunk);
+            // Tiled files are either multi-part - in which case they must have an explicit chunkCount attribute,
+            // or they have a single-part-tiled version flag, handled above. Hence, this must be a scanline part:
+            chunkCount = MathHelpers.DivAndRoundUp(part.DataWindow.Height, compressor.ScanLinesPerChunk);
         }
     }
 

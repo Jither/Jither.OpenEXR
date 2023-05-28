@@ -67,14 +67,21 @@ internal class EXRHeader
         set => SetAttribute(new EXRAttribute<float>(AttributeNames.ScreenWindowWidth, value));
     }
 
-    /// <summary>
-    /// Determines the size of the tiles and the number of resolution levels in the file.
-    /// </summary>
-    /// <remarks>
-    /// The OpenEXR library ignores tile description attributes in scan line based files. The decision whether the file contains scan lines or tiles 
-    /// is based on the value of bit 9 in the file’s version field, not on the presence of a tile description attribute.
-    /// </remarks>
-    public TileDesc? Tiles => GetAttributeOrDefault<TileDesc>(AttributeNames.Tiles);
+    public TileDesc? Tiles
+    {
+        get => GetAttributeOrDefault<TileDesc>(AttributeNames.Tiles);
+        set
+        {
+            if (value != null)
+            {
+                SetAttribute(new EXRAttribute<TileDesc>(AttributeNames.Tiles, value));
+            }
+            else
+            {
+                RemoveAttribute(AttributeNames.Tiles);
+            }
+        }
+    }
 
     /// <summary>
     /// Specifies the view this part is associated with (mostly used for files which stereo views).

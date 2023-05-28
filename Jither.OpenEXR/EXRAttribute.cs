@@ -152,7 +152,9 @@ public abstract class EXRAttribute
                 return new EXRAttribute<List<string>>(name, list);
             case "tiledesc":
                 CheckSize(9);
-                return new EXRAttribute<TileDesc>(name, new TileDesc(reader.ReadUInt(), reader.ReadUInt(), reader.ReadByte()));
+                // We're ignoring that tiledesc X/Y are actually unsigned - it's inconsistent with every other part of OpenEXR, e.g.
+                // DataWindow and DisplayWindow which are signed.
+                return new EXRAttribute<TileDesc>(name, new TileDesc(reader.ReadInt(), reader.ReadInt(), reader.ReadByte()));
             case "timecode":
                 CheckSize(8);
                 return new EXRAttribute<TimeCode>(name, new TimeCode(reader.ReadUInt(), reader.ReadUInt()));
@@ -302,8 +304,10 @@ public class EXRAttribute<T> : EXRAttribute
                 break;
             case TileDesc tileDesc:
                 WriteSize(9);
-                writer.WriteUInt(tileDesc.XSize);
-                writer.WriteUInt(tileDesc.YSize);
+                // We're ignoring that tiledesc X/Y are actually unsigned - it's inconsistent with every other part of OpenEXR, e.g.
+                // DataWindow and DisplayWindow, which are signed.
+                writer.WriteInt(tileDesc.XSize);
+                writer.WriteInt(tileDesc.YSize);
                 writer.WriteByte(tileDesc.Mode);
                 break;
             case TimeCode timeCode:

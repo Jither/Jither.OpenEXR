@@ -47,8 +47,9 @@ public class EXRPartDataReader : EXRPartDataHandler
         int destOffset = 0;
         for (int i = 0; i < chunkCount; i++)
         {
-            int bytesRead = InternalReadChunk(i, dest, destOffset);
-            destOffset += bytesRead;
+            var chunkInfo = ReadChunkHeader(i);
+            InternalReadChunk(chunkInfo, dest, destOffset);
+            destOffset += chunkInfo.UncompressedByteCount;
         }
     }
 
@@ -62,19 +63,21 @@ public class EXRPartDataReader : EXRPartDataHandler
         int offset = 0;
         for (int i = 0; i < chunkCount; i++)
         {
-            int bytesRead = ReadChunkInterleaved(i, dest, channelOrder, offset);
-            offset += bytesRead;
+            ChunkInfo chunkInfo = ReadChunkInterleaved(i, dest, channelOrder, offset);
+            offset += chunkInfo.UncompressedByteCount;
         }
     }
 
     public void ReadChunk(int chunkIndex, byte[] dest, int destOffset = 0)
     {
-        InternalReadChunk(chunkIndex, dest, destOffset);
+        var chunkInfo = ReadChunkHeader(chunkIndex);
+        InternalReadChunk(chunkInfo, dest, destOffset);
     }
 
-    public int ReadChunkInterleaved(int chunkIndex, byte[] dest, IEnumerable<string> channelOrder, int offset = 0)
+    public ChunkInfo ReadChunkInterleaved(int chunkIndex, byte[] dest, IEnumerable<string> channelOrder, int offset = 0)
     {
         CheckInterleavedPrerequisites();
+        var chunkInfo = ReadChunkHeader(chunkIndex);
 
         // Offsets are always ordered with scanlines from top to bottom (INCREASING_Y). However, the order of the scanlines themselves within the file
         // may be bottom to top or random (see LineOrder). Each scanline block stores its first scanline's y coordinate, meaning it's possible to
@@ -84,14 +87,14 @@ public class EXRPartDataReader : EXRPartDataHandler
         // Collect byte offsets for the channel components in each pixel. I.e., at what byte offset within the channel-interleaved pixel should each channel be stored?
         var destOffsets = GetInterleaveOffsets(channelOrder, out var interleavedBytesPerPixel);
 
-        var data = ArrayPool<byte>.Shared.Rent(GetChunkByteCount(chunkIndex));
+        var pixelData = ArrayPool<byte>.Shared.Rent(GetChunkByteCount(chunkInfo));
         try
         {
-            int bytesRead = InternalReadChunk(chunkIndex, data, 0);
+            InternalReadChunk(chunkInfo, pixelData, 0);
 
             // The decompressed pixel data is stored with channels separated and ordered alphabetically
             int sourceOffset = 0;
-            int scanlineCount = GetChunkScanLineCount(chunkIndex);
+            int scanlineCount = GetChunkScanLineCount(chunkInfo);
 
             for (int scanline = 0; scanline < scanlineCount; scanline++)
             {
@@ -110,7 +113,7 @@ public class EXRPartDataReader : EXRPartDataHandler
                         {
                             for (int j = 0; j < channelBytesPerPixel; j++)
                             {
-                                dest[destOffset + j] = data[sourceOffset++];
+                                dest[destOffset + j] = pixelData[sourceOffset++];
                             }
                             destOffset += interleavedBytesPerPixel;
                         }
@@ -123,38 +126,59 @@ public class EXRPartDataReader : EXRPartDataHandler
                 }
             }
 
-            return bytesRead;
+            return chunkInfo;
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(data);
+            ArrayPool<byte>.Shared.Return(pixelData);
         }
     }
 
-    private int InternalReadChunk(int chunkIndex, byte[] dest, int destIndex)
+    private ChunkInfo ReadChunkHeader(int chunkIndex)
     {
         var offset = OffsetTable[chunkIndex];
         reader.Seek((long)offset);
         int partNumber = isMultiPart ? reader.ReadInt() : 0;
-        int y = reader.ReadInt();
-        int pixelDataSize = reader.ReadInt();
 
-        var chunkStream = reader.GetChunkStream(pixelDataSize);
-        int bytesToRead = GetChunkByteCount(chunkIndex);
-        using (var destStream = new MemoryStream(dest, destIndex, bytesToRead))
+        ChunkInfo chunkInfo;
+        if (IsTiled)
+        {
+            int x = reader.ReadInt();
+            int y = reader.ReadInt();
+            int levelX = reader.ReadInt();
+            int levelY = reader.ReadInt();
+            chunkInfo = new TileChunkInfo(chunkIndex, partNumber, x, y, levelX, levelY);
+        }
+        else
+        {
+            int y = reader.ReadInt();
+            chunkInfo = new ScanlineChunkInfo(chunkIndex, partNumber, y);
+        }
+
+        chunkInfo.FileOffset = offset;
+        chunkInfo.CompressedByteCount = reader.ReadInt();
+        chunkInfo.UncompressedByteCount = GetChunkByteCount(chunkInfo);
+
+        return chunkInfo;
+    }
+
+    private void InternalReadChunk(ChunkInfo chunkInfo, byte[] dest, int destIndex)
+    {
+        reader.Seek(chunkInfo.FileOffset);
+        var chunkStream = reader.GetChunkStream(chunkInfo.CompressedByteCount);
+
+        using (var destStream = new MemoryStream(dest, destIndex, chunkInfo.UncompressedByteCount))
         {
             // Yes, compressors could use the length or capacity of the stream rather than
             // an explicit expectedBytes parameter, but not sure if we'll change this
             // implementation in the future.
             var info = new PixelDataInfo(
-                part.Channels, 
-                new System.Drawing.Rectangle(0, y, PixelsPerScanLine, GetChunkScanLineCount(chunkIndex)),
-                bytesToRead
+                part.Channels,
+                GetBounds(chunkInfo),
+                chunkInfo.UncompressedByteCount
             );
 
             compressor.Decompress(chunkStream, destStream, info);
         }
-
-        return bytesToRead;
     }
 }

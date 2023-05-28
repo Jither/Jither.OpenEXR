@@ -6,7 +6,8 @@ namespace Jither.OpenEXR;
 public class EXRPart
 {
     private readonly EXRHeader header;
-    private EXRFile file;
+    private readonly bool isSinglePartTiled;
+    private EXRFile? file;
 
     public static readonly string[] RequiredAttributes = new[] {
         AttributeNames.Channels,
@@ -26,6 +27,52 @@ public class EXRPart
     };
 
     public IReadOnlyList<EXRAttribute> Attributes => header.Attributes;
+
+    /// <summary>
+    /// The name attribute defines the name of each part. The name of each part must be unique. Names may contain ‘.’ characters to present a tree-like structure of the parts in a file.
+    /// Required if the file is either MultiPart or NonImage.
+    /// </summary>
+    public string? Name
+    {
+        get => header.Name;
+        set => header.Name = value;
+    }
+
+    /// <summary>
+    /// Data types are defined by the type attribute. There are four types:
+    /// 
+    /// 1. Scan line images: indicated by a type attribute of scanlineimage.
+    /// 2. Tiled images: indicated by a type attribute of tiledimage.
+    /// 3. Deep scan line images: indicated by a type attribute of deepscanline.
+    /// 4. Deep tiled images: indicated by a type attribute of deeptile.
+    /// 
+    /// Required if the file is either MultiPart or NonImage.
+    /// </summary>
+    /// <remarks>
+    /// This value must agree with the version field’s tile bit (9) and non-image (deep data) bit (11) settings.
+    /// </remarks>
+    public PartType Type
+    {
+        get => header.Type switch
+        {
+            "scanlineimage" => PartType.ScanLineImage,
+            "tiledimage" => PartType.TiledImage,
+            "deepscanline" => PartType.DeepScanLine,
+            "deeptile" => PartType.DeepTiled,
+            _ => PartType.Unknown
+        };
+        set
+        {
+            header.Type = value switch
+            {
+                PartType.ScanLineImage => "scanlineimage",
+                PartType.TiledImage => "tiledimage",
+                PartType.DeepScanLine => "deepscanline",
+                PartType.DeepTiled => "deeptile",
+                _ => null,
+            };
+        }
+    }
 
     /// <summary>
     /// Description of the image channels stored in the part.
@@ -107,50 +154,22 @@ public class EXRPart
     }
 
     /// <summary>
-    /// The name attribute defines the name of each part. The name of each part must be unique. Names may contain ‘.’ characters to present a tree-like structure of the parts in a file.
-    /// Required if the file is either MultiPart or NonImage.
+    /// Determines the size of the tiles and the number of resolution levels in the file. Null for non-tiled parts. See <see cref="IsTiled"/>
     /// </summary>
-    public string? Name
+    /// <remarks>
+    /// The OpenEXR library ignores tile description attributes in scan line based files. The decision whether the file contains scan lines or tiles 
+    /// is based on the value of bit 9 in the file’s version field, not on the presence of a tile description attribute.
+    /// </remarks>
+    public TileDesc? Tiles
     {
-        get => header.Name;
-        set => header.Name = value;
+        get => header.Tiles;
+        set => header.Tiles = value;
     }
 
     /// <summary>
-    /// Data types are defined by the type attribute. There are four types:
-    /// 
-    /// 1. Scan line images: indicated by a type attribute of scanlineimage.
-    /// 2. Tiled images: indicated by a type attribute of tiledimage.
-    /// 3. Deep scan line images: indicated by a type attribute of deepscanline.
-    /// 4. Deep tiled images: indicated by a type attribute of deeptile.
-    /// 
-    /// Required if the file is either MultiPart or NonImage.
+    /// Indicates whether the part is tiled - that is, whether it has a tiled type attribute or its in a file with a "single part tiled" version bit.
     /// </summary>
-    /// <remarks>
-    /// This value must agree with the version field’s tile bit (9) and non-image (deep data) bit (11) settings.
-    /// </remarks>
-    public PartType Type
-    {
-        get => header.Type switch
-        {
-            "scanlineimage" => PartType.ScanLineImage,
-            "tiledimage" => PartType.TiledImage,
-            "deepscanline" => PartType.DeepScanLine,
-            "deeptile" => PartType.DeepTiled,
-            _ => PartType.Unknown
-        };
-        set
-        {
-            header.Type = value switch
-            {
-                PartType.ScanLineImage => "scanlineimage",
-                PartType.TiledImage => "tiledimage",
-                PartType.DeepScanLine => "deepscanline",
-                PartType.DeepTiled => "deeptile",
-                _ => null,
-            };
-        }
-    }
+    public bool IsTiled => Type == PartType.TiledImage || Type == PartType.DeepTiled || isSinglePartTiled;
 
     /// <summary>
     /// Indicates whether the part has R, G and B channels (of any type)
@@ -204,9 +223,10 @@ public class EXRPart
         header.ScreenWindowWidth = 1;
     }
 
-    internal EXRPart(EXRHeader header)
+    internal EXRPart(EXRHeader header, bool isSinglePartTiled)
     {
         this.header = header;
+        this.isSinglePartTiled = isSinglePartTiled;
     }
 
     internal void AssignFile(EXRFile file)

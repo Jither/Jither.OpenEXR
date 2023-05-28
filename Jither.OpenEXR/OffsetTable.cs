@@ -2,7 +2,7 @@
 
 namespace Jither.OpenEXR;
 
-public class OffsetTable : List<ulong>
+public class OffsetTable : List<long>
 {
     public OffsetTable()
     {
@@ -17,7 +17,8 @@ public class OffsetTable : List<ulong>
         var result = new OffsetTable(count);
         for (int i = 0; i < count; i++)
         {
-            result.Add(reader.ReadULong());
+            // OpenEXR uses ulong - .NET uses long for file positions, so we'll read it as long. Should be enough...
+            result.Add((long)reader.ReadULong());
         }
         return result;
     }

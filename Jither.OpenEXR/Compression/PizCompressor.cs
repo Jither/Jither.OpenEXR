@@ -1,8 +1,8 @@
 ﻿using Jither.OpenEXR.Attributes;
+using Jither.OpenEXR.Drawing;
 using System.Buffers;
 using System.Runtime.InteropServices;
 using System.Text;
-using Rectangle = System.Drawing.Rectangle;
 
 namespace Jither.OpenEXR.Compression;
 
@@ -21,7 +21,7 @@ public class PizCompressor : Compressor
     private class ChannelInfo
     {
         public int YSampling { get; }
-        public V2i Resolution { get; }
+        public Dimensions<int> Resolution { get; }
         public int UShortsPerPixel { get; }
         public int UShortsPerLine { get; }
         public int BytesPerLine { get; }
@@ -30,10 +30,10 @@ public class PizCompressor : Compressor
         public int NextScanLineByteOffset { get; set; }
         public int NextScanLineUShortOffset { get; set; }
 
-        public ChannelInfo(Channel channel, Rectangle bounds)
+        public ChannelInfo(Channel channel, Bounds<int> bounds)
         {
             YSampling = channel.YSampling;
-            Resolution = channel.GetSubsampledResolution(new V2i(bounds.Width, bounds.Height));
+            Resolution = channel.GetSubsampledResolution(bounds);
             UShortsPerPixel = channel.Type.GetBytesPerPixel() / 2;
             UShortsPerLine =  Resolution.X * UShortsPerPixel;
             BytesPerLine = UShortsPerLine * 2;
@@ -86,7 +86,7 @@ public class PizCompressor : Compressor
                 {
                     var bitmap = bitmapArray.AsSpan(0, BITMAP_SIZE);
                     // Bitmap is sparsely populated, so need to clear it before use
-                    bitmap.Fill(0);
+                    bitmap.Clear();
 
                     (var minNonZero, var maxNonZero) = BitmapFromData(uncompressed, bitmap);
                     ushort[] lutArray = ArrayPool<ushort>.Shared.Rent(LUT_SIZE);

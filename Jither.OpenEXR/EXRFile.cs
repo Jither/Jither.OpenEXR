@@ -137,6 +137,7 @@ public class EXRFile : IDisposable
         return parts.IndexOf(part);
     }
 
+    [MemberNotNull(nameof(OriginalVersion))]
     private void ReadHeaders(EXRReader reader)
     {
         var magicNumber = reader.ReadInt();
@@ -169,7 +170,7 @@ public class EXRFile : IDisposable
 
         foreach (var header in headers)
         {
-            var part = new EXRPart(header);
+            var part = new EXRPart(header, version.IsSinglePartTiled);
             var dataReader = new EXRPartDataReader(part, version, reader);
             part.AssignDataReader(dataReader);
             AddPart(part);

@@ -1,14 +1,14 @@
-﻿using Rectangle = System.Drawing.Rectangle;
+﻿using Jither.OpenEXR.Drawing;
 
 namespace Jither.OpenEXR.Compression;
 
 public class PixelDataInfo
 {
     public ChannelList Channels { get; }
-    public Rectangle Bounds { get; }
+    public Bounds<int> Bounds { get; }
     public int UncompressedByteSize { get; }
 
-    public PixelDataInfo(ChannelList channels, Rectangle bounds, int expectedByteSize)
+    public PixelDataInfo(ChannelList channels, Bounds<int> bounds, int expectedByteSize)
     {
         Channels = channels;
         Bounds = bounds;
