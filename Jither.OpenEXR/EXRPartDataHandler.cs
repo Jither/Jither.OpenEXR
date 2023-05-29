@@ -89,7 +89,7 @@ public abstract class EXRPartDataHandler
             EXRCompression.ZIPS => new ZipSCompressor(),
             EXRCompression.ZIP => new ZipCompressor(),
             EXRCompression.PIZ => new PizCompressor(),
-            _ => throw new NotSupportedException($"{part.Compression} compression not supported")
+            _ => new UnsupportedCompressor(part.Compression)
         };
         
         isMultiPart = version.IsMultiPart;

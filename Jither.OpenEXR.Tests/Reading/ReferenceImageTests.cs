@@ -178,11 +178,26 @@ public class ReferenceImageTests
 
     [Theory]
     [InlineData("Scanlines/Cannon.exr")]
-    public void Fails_attempting_to_read_unsupported_compression(string imagePath)
+    public void Allows_reading_headers_for_unsupported_compression(string imagePath)
     {
         var path = Path.Combine(BasePath, imagePath);
-        // TODO: Should actually allow reading headers.
-        Assert.Throws<NotSupportedException>(() => new EXRFile(path));
+        using (var file = new EXRFile(path))
+        {
+            Assert.Equal(1, file.Parts.Count);
+            var part = file.Parts[0];
+            Assert.Equal(EXRCompression.B44, part.Compression);
+        }
+    }
+
+    [Theory]
+    [InlineData("Scanlines/Cannon.exr")]
+    public void Fails_attempting_to_read_data_for_unsupported_compression(string imagePath)
+    {
+        var path = Path.Combine(BasePath, imagePath);
+        using (var file = new EXRFile(path))
+        {
+            Assert.Throws<NotSupportedException>(() => TestReadParts(file.Parts));
+        }
     }
 
     [Theory]
