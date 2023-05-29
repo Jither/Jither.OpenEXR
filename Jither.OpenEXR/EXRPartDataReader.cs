@@ -20,15 +20,15 @@ public class EXRPartDataReader : EXRPartDataHandler
             }
 
             reader.Seek(offsetTableOffset);
-            _offsets = OffsetTable.ReadFrom(reader, chunkCount);
+            _offsets = OffsetTable.ReadFrom(reader, ChunkCount);
             return _offsets;
         }
     }
 
-    public EXRPartDataReader(EXRPart part, EXRVersion version, EXRReader reader) : base(part, version)
+    public EXRPartDataReader(EXRPart part, EXRVersion version, EXRReader reader, long offsetTableOffset) : base(part, version)
     {
         this.reader = reader;
-        this.offsetTableOffset = reader.Position;
+        this.offsetTableOffset = offsetTableOffset;
     }
 
     public void Read(byte[] dest)
@@ -45,7 +45,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
 
         int destOffset = 0;
-        for (int i = 0; i < chunkCount; i++)
+        for (int i = 0; i < ChunkCount; i++)
         {
             var chunkInfo = ReadChunkHeader(i);
             InternalReadChunk(chunkInfo, dest, destOffset);
@@ -61,7 +61,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
 
         int offset = 0;
-        for (int i = 0; i < chunkCount; i++)
+        for (int i = 0; i < ChunkCount; i++)
         {
             ChunkInfo chunkInfo = ReadChunkInterleaved(i, dest, channelOrder, offset);
             offset += chunkInfo.UncompressedByteCount;

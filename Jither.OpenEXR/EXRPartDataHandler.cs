@@ -10,7 +10,7 @@ public abstract class EXRPartDataHandler
 {
     protected readonly EXRPart part;
     protected readonly Compressor compressor;
-    protected readonly int chunkCount;
+    public int ChunkCount { get; }
     protected readonly bool isMultiPart;
 
     protected int PixelsPerScanLine => part.DataWindow.Width;
@@ -40,7 +40,7 @@ public abstract class EXRPartDataHandler
 
     protected int GetChunkScanLineCount(ChunkInfo chunkInfo)
     {
-        if (chunkInfo.Index < chunkCount - 1)
+        if (chunkInfo.Index < ChunkCount - 1)
         {
             return compressor.ScanLinesPerChunk;
         }
@@ -96,26 +96,26 @@ public abstract class EXRPartDataHandler
 
         if (isMultiPart)
         {
-            chunkCount = part.GetAttributeOrThrow<int>("chunkCount");
+            ChunkCount = part.GetAttributeOrThrow<int>("chunkCount");
         }
         else if (version.IsSinglePartTiled)
         {
             var tiles = part.Tiles ?? throw new EXRFormatException($"Missing tiles attribute for single tiled part");
             // "In a file with multiple levels, tiles have the same size, regardless of their level. Lower-resolution levels contain fewer, rather than smaller, tiles."
             // So, we need to figure out the number of tiles required to cover DataWindow at each level.
-            chunkCount = 0;
+            ChunkCount = 0;
             int totalWidth = part.DataWindow.Width;
             int totalHeight = part.DataWindow.Height;
             foreach (var coverage in tiles.Coverages)
             {
-                chunkCount += MathHelpers.DivAndRoundUp(totalWidth, coverage.Width) * MathHelpers.DivAndRoundUp(totalHeight, coverage.Height);
+                ChunkCount += MathHelpers.DivAndRoundUp(totalWidth, coverage.Width) * MathHelpers.DivAndRoundUp(totalHeight, coverage.Height);
             }
         }
         else
         {
             // Tiled files are either multi-part - in which case they must have an explicit chunkCount attribute,
             // or they have a single-part-tiled version flag, handled above. Hence, this must be a scanline part:
-            chunkCount = MathHelpers.DivAndRoundUp(part.DataWindow.Height, compressor.ScanLinesPerChunk);
+            ChunkCount = MathHelpers.DivAndRoundUp(part.DataWindow.Height, compressor.ScanLinesPerChunk);
         }
     }
 

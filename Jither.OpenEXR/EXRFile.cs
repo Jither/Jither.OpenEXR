@@ -168,12 +168,17 @@ public class EXRFile : IDisposable
             headers.Add(header);
         }
 
+        long partOffsetTableOffset = reader.Position;
         foreach (var header in headers)
         {
             var part = new EXRPart(header, version.IsSinglePartTiled);
-            var dataReader = new EXRPartDataReader(part, version, reader);
+            var dataReader = new EXRPartDataReader(part, version, reader, partOffsetTableOffset);
             part.AssignDataReader(dataReader);
             AddPart(part);
+            // Find offset table for next part. This is only relevant for multipart, where a chunkCount attribute is required
+            // for each part - but we might as well just get it from the calculated chunk count, which uses the chunkCount attribute
+            // when it's present.
+            partOffsetTableOffset += dataReader.ChunkCount * 8;
         }
     }
 

@@ -16,7 +16,7 @@ public class EXRPartDataWriter : EXRPartDataHandler
 
     public void WriteOffsetPlaceholders()
     {
-        for (int i = 0; i < chunkCount; i++)
+        for (int i = 0; i < ChunkCount; i++)
         {
             writer.WriteULong(0xffffffffffffffffUL);
         }
@@ -25,7 +25,7 @@ public class EXRPartDataWriter : EXRPartDataHandler
     public void Write(byte[] data)
     {
         int sourceOffset = 0;
-        for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++)
+        for (int chunkIndex = 0; chunkIndex < ChunkCount; chunkIndex++)
         {
             int y = chunkIndex * compressor.ScanLinesPerChunk + part.DataWindow.YMin;
             var chunkInfo = new ScanlineChunkInfo(chunkIndex, part.PartNumber, y);
@@ -37,7 +37,7 @@ public class EXRPartDataWriter : EXRPartDataHandler
     public void WriteInterleaved(byte[] data, IEnumerable<string> channelOrder)
     {
         int sourceOffset = 0;
-        for (int chunkIndex = 0; chunkIndex < chunkCount; chunkIndex++)
+        for (int chunkIndex = 0; chunkIndex < ChunkCount; chunkIndex++)
         {
             int y = chunkIndex * compressor.ScanLinesPerChunk + part.DataWindow.YMin;
             var chunkInfo = new ScanlineChunkInfo(chunkIndex, part.PartNumber, y);
