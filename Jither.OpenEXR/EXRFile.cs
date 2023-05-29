@@ -181,7 +181,7 @@ public class EXRFile : IDisposable
     {
         foreach (var part in parts)
         {
-            part.PrepareForWriting(version.IsMultiPart, version.HasNonImageParts);
+            part.PrepareForWriting(version.IsMultiPart);
         }
         Validate(version);
 

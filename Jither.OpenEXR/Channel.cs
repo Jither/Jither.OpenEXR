@@ -107,7 +107,7 @@ public class Channel
     public Dimensions<int> GetSubsampledResolution(Bounds<int> area)
     {
         // TODO: This isn't actually accurate. Consider an area from y = 2 to y = 4 with YSampling = 5, which would only sample y = 0 and y = 5
-        return new Dimensions<int>(area.Width / XSampling, area.Width / YSampling);
+        return new Dimensions<int>(area.Width / XSampling, area.Height / YSampling);
     }
 
     /// <summary>

@@ -2,5 +2,5 @@
 
 public class ZipCompressor : ZipSCompressor
 {
-    public override int ScanLinesPerChunk { get; } = EXRCompression.ZIPS.GetScanLinesPerChunk();
+    public override int ScanLinesPerChunk { get; } = EXRCompression.ZIP.GetScanLinesPerChunk();
 }

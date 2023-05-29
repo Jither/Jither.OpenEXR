@@ -155,16 +155,18 @@ public class EXRPartDataReader : EXRPartDataHandler
             chunkInfo = new ScanlineChunkInfo(chunkIndex, partNumber, y);
         }
 
-        chunkInfo.FileOffset = offset;
         chunkInfo.CompressedByteCount = reader.ReadInt();
         chunkInfo.UncompressedByteCount = GetChunkByteCount(chunkInfo);
+
+        chunkInfo.PixelDataFileOffset = reader.Position;
+        chunkInfo.FileOffset = offset;
 
         return chunkInfo;
     }
 
     private void InternalReadChunk(ChunkInfo chunkInfo, byte[] dest, int destIndex)
     {
-        reader.Seek(chunkInfo.FileOffset);
+        reader.Seek(chunkInfo.PixelDataFileOffset);
         var chunkStream = reader.GetChunkStream(chunkInfo.CompressedByteCount);
 
         using (var destStream = new MemoryStream(dest, destIndex, chunkInfo.UncompressedByteCount))

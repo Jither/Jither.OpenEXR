@@ -107,6 +107,7 @@ public class EXRPartDataWriter : EXRPartDataHandler
 
         long sizeOffset = WriteChunkHeader(chunkInfo);
 
+        chunkInfo.PixelDataFileOffset = writer.Position;
         var dest = writer.GetStream();
         chunkInfo.UncompressedByteCount = GetChunkByteCount(chunkInfo);
 

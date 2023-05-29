@@ -289,7 +289,7 @@ public class EXRPart
         this.DataWriter = writer;
     }
 
-    internal void PrepareForWriting(bool fileIsMultiPart, bool fileHasDeepData)
+    internal void PrepareForWriting(bool fileIsMultiPart)
     {
         if (fileIsMultiPart)
         {
