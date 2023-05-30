@@ -136,6 +136,16 @@ public class ChannelList : IReadOnlyList<Channel>
         return channels.Sum(c => c.GetByteCount(area));
     }
 
+    public ulong GetByteCountLarge(Bounds<int> area)
+    {
+        ulong result = 0;
+        foreach (var channel in channels)
+        {
+            result += channel.GetByteCountLarge(area);
+        }
+        return result;
+    }
+
     private static bool ReadChannel(EXRReader reader, out Channel? channel, out long bytesRead)
     {
         var start = reader.Position;
@@ -160,6 +170,19 @@ public class ChannelList : IReadOnlyList<Channel>
 
         bytesRead = reader.Position - start;
         return true;
+    }
+
+    public void Validate()
+    {
+        int index = 0;
+        foreach (var channel in channels)
+        {
+            if (channel.Name == String.Empty)
+            {
+                throw new EXRFormatException($"Channel {index} has an empty name");
+            }
+            index++;
+        }
     }
 
     private void UpdateSorting()

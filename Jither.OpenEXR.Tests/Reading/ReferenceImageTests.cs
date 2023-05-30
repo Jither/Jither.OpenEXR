@@ -518,9 +518,18 @@ public class ReferenceImageTests
     }
 
     [Theory]
+    [InlineData("Damaged/asan_heap-oob_7efd9bd346a5_639_9e0b30ed499cdf9e8802dd64e16a9508_exr")]
     [InlineData("Damaged/asan_heap-oob_7f479f9536bd_391_5953693841a7931caf3d4592f8b9c90b_exr")]
+    [InlineData("Damaged/asan_heap-oob_7fb3a7c6fc99_871_52d1f03c515bc91cc894515beea56a4f_exr")]
     [InlineData("Damaged/imf_test_deep_tile_file_fuzz_broken_exr")]
-    public void Fails_gracefully_on_invalid_chunk_header(string imagePath)
+    [InlineData("Damaged/imf_test_tile_file_fuzz_broken_memleak_exr")]
+    [InlineData("Damaged/memory_DOS_1")]
+    [InlineData("Damaged/memory_DOS_2.1")]
+    [InlineData("Damaged/memory_DOS_2.2")]
+    [InlineData("Damaged/openexr_2.2.0_memory_allocation_error_2_exr")]
+    [InlineData("Damaged/openexr_2.2.0_memory_allocation_error_3_exr")]
+    [InlineData("Damaged/signal_sigsegv_7ffff7b21e8a_389_bf048bf41ca71b4e00d2b0edd0a39e27_exr")]
+    public void Fails_gracefully_on_invalid_chunk_header_or_validation(string imagePath)
     {
         string path = Path.Combine(BasePath, imagePath);
         using (var file = new EXRFile(path))
@@ -531,10 +540,9 @@ public class ReferenceImageTests
 
     [Theory]
     [InlineData("Damaged/asan_heap-oob_4cb169_978_5f00ce89c3847e739b256efc49f312cf_exr")]
-    [InlineData("Damaged/asan_heap-oob_7efd9bd346a5_639_9e0b30ed499cdf9e8802dd64e16a9508_exr")]
+    [InlineData("Damaged/asan_heap-oob_7f171b7ab3a2_937_b4e2415c399c2ab39548de911223769d_exr")]
     [InlineData("Damaged/asan_heap-oob_7f0faa6bb393_900_7d9ed0a6eaa68f8308a042d725119ad2_exr")]
     [InlineData("Damaged/asan_heap-oob_7f11c0330393_935_240e7cacd61711daf4285366fea95e0c_exr")]
-    [InlineData("Damaged/asan_heap-oob_7f171b7ab3a2_937_b4e2415c399c2ab39548de911223769d_exr")]
     [InlineData("Damaged/asan_heap-oob_7f1fd65113ac_935_8fd55930e544dc3fb88659a6a8509c14_exr")]
     [InlineData("Damaged/asan_heap-oob_7f4aaebde389_918_a40f029a8121e5e26fe338b1fb91846e_exr")]
     [InlineData("Damaged/asan_heap-oob_7f4d5072b39d_561_5f5e4ef49a581edaf7bf0858fbfcfdd1_exr")]
@@ -546,26 +554,19 @@ public class ReferenceImageTests
     [InlineData("Damaged/asan_heap-oob_7f8a69d8339d_829_381ccc69dc6bd21c43a1deb0965bf5ab_exr")]
     [InlineData("Damaged/asan_heap-oob_7fa34eacd389_820_476a8109ebb3f7d02252e773b7bca45d_exr")]
     [InlineData("Damaged/asan_heap-oob_7faf9aba03ac_414_75af58c21b9b9e994747f9d6a5fc46d4_exr")]
-    [InlineData("Damaged/asan_heap-oob_7fb3a7c6fc99_871_52d1f03c515bc91cc894515beea56a4f_exr")]
     [InlineData("Damaged/asan_heap-oob_7fbe2d8e838e_932_9e9d2b0a870c0ad516189d274c2f98e4_exr")]
     [InlineData("Damaged/asan_heap-oob_7fdb9de0b38e_829_636ff2831c664e14a73282a3299781dd_exr")]
     [InlineData("Damaged/asan_heap-oob_7fe667eb33a2_999_31f64961e47968656f00573f7db5c67d_exr")]
     [InlineData("Damaged/asan_stack-oob_433d4f_436_bb29e6f88ad5f5b2f5f9b68a3655b1d8_exr", Skip = "We don't support DWAA")]
     [InlineData("Damaged/autofuzz_146551958", Skip = "We don't support B44")]
-    [InlineData("Damaged/imf_test_tile_file_fuzz_broken_memleak_exr")]
-    [InlineData("Damaged/memory_DOS_1")]
-    [InlineData("Damaged/memory_DOS_2.1")]
-    [InlineData("Damaged/memory_DOS_2.2")]
     [InlineData("Damaged/openexr_2.2.0_heap_buffer_overflow_exr")]
-    [InlineData("Damaged/openexr_2.2.0_memory_allocation_error_2_exr")]
-    [InlineData("Damaged/openexr_2.2.0_memory_allocation_error_3_exr")]
     [InlineData("Damaged/poc-4d912f49ddc13ff49f95543880d47c85a8918e563fb723c340264f1719057613.mini")]
     [InlineData("Damaged/poc-66e4d1f68a3112b9aaa93831afbf8e283fd39be5e4591708bad917e6886c0ebb.mini")]
-    [InlineData("Damaged/signal_sigsegv_7ffff7b21e8a_389_bf048bf41ca71b4e00d2b0edd0a39e27_exr")]
     public void Fails_gracefully_on_invalid_compressed_data(string imagePath)
     {
         string path = Path.Combine(BasePath, imagePath);
-        using (var file = new EXRFile(path))
+        // We disable strict attribute requirements here, because many of the files fail them, but that failure isn't really the point of the test.
+        using (var file = new EXRFile(path, new EXRReadOptions { StrictAttributeRequirements = false }))
         {
             Assert.Throws<EXRCompressionException>(() => TestReadParts(file.Parts));
         }

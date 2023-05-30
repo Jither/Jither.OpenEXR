@@ -118,6 +118,17 @@ public class Channel
         return GetSubsampledResolution(area).Area * Type.GetBytesPerPixel();
     }
 
+    /// <summary>
+    /// Returns the number of bytes occupied by the channel for a given area, taking into account sub-sampling and value type (16-bit or 32-bit). Used for *very* large images (exceeding the int 2GB limit).
+    /// </summary>
+    public ulong GetByteCountLarge(Bounds<int> area)
+    {
+        var dims = GetSubsampledResolution(area);
+        // OpenEXR defines width and height as being contained in a signed integer, so results above 2GB don't enter until this point, with pixel area:
+        ulong pixels = (uint)dims.Width * (uint)dims.Height;
+        return pixels * (ulong)Type.GetBytesPerPixel();
+    }
+
     public override string ToString()
     {
         return $"{Name}:{Type} ({PerceptualTreatment}, Sx = {XSampling}, Sy = {YSampling})";

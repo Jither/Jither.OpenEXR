@@ -2,8 +2,6 @@
 
 Jither.OpenEXR is a C#/.NET library for reading and writing [OpenEXR](https://openexr.com/) image files.
 
-The current code is the result of a weekend's work, and isn't ready for production use in any way.
-
 Current state
 -------------
 * Half (F16), Float (F32) and Uint channel support

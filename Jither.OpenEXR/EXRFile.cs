@@ -3,6 +3,29 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace Jither.OpenEXR;
 
+public class EXRReadOptions
+{
+    /// <summary>
+    /// OpenEXR specs require some attributes (<see cref="EXRPart.StrictlyRequiredAttributes"/> which, nonetheless,
+    /// aren't checked, and which some - otherwise valid - EXR files are missing. This settings allows disabling
+    /// validation of these attributes, instead providing default values for them. If true, validation will throw
+    /// when reading a file with any of these attributes missing.
+    /// </summary>
+    public bool StrictAttributeRequirements { get; set; } = true;
+
+    /// <summary>
+    /// Maximum image (data window) width in pixels. This protects against applications allocating large amounts of memory for
+    /// undetected corrupt files. Set to 0 for no restrictions.
+    /// </summary>
+    public int MaxImageWidth { get; set; } = 1024 * 4096;
+
+    /// <summary>
+    /// Maximum image (data window) height in pixels. This protects against applications allocating large amounts of memory for
+    /// undetected corrupt files. Set to 0 for no restrictions.
+    /// </summary>
+    public int MaxImageHeight { get; set; } = 1024 * 4096;
+}
+
 public class EXRFile : IDisposable
 {
     private readonly List<EXRPart> parts = new();
@@ -49,7 +72,7 @@ public class EXRFile : IDisposable
     /// Opens an existing OpenEXR file for reading. File and part headers will be read and available after construction.
     /// Use <see cref="EXRPart.DataReader"/> to read the pixel data of a part.
     /// </summary>
-    public EXRFile(string path) : this(new FileStream(path, FileMode.Open, FileAccess.Read))
+    public EXRFile(string path, EXRReadOptions? readOptions = null) : this(new FileStream(path, FileMode.Open, FileAccess.Read), readOptions)
     {
 
     }
@@ -58,15 +81,16 @@ public class EXRFile : IDisposable
     /// Opens a OpenEXR file from a stream for reading. File and part headers will be read and available after construction.
     /// Use <see cref="EXRPart.DataReader"/> to read the pixel data of a part.
     /// </summary>
-    public EXRFile(Stream stream) : this(new EXRReader(stream))
+    public EXRFile(Stream stream, EXRReadOptions? readOptions = null) : this(new EXRReader(stream), readOptions)
     {
 
     }
 
-    private EXRFile(EXRReader reader)
+    private EXRFile(EXRReader reader, EXRReadOptions? readOptions)
     {
+        readOptions ??= new EXRReadOptions();
         this.reader = reader;
-        ReadHeaders(reader);
+        ReadHeaders(reader, readOptions);
     }
 
     /// <summary>
@@ -138,7 +162,7 @@ public class EXRFile : IDisposable
     }
 
     [MemberNotNull(nameof(OriginalVersion))]
-    private void ReadHeaders(EXRReader reader)
+    private void ReadHeaders(EXRReader reader, EXRReadOptions readOptions)
     {
         var magicNumber = reader.ReadInt();
         if (magicNumber != 20000630)
@@ -171,7 +195,7 @@ public class EXRFile : IDisposable
         long partOffsetTableOffset = reader.Position;
         foreach (var header in headers)
         {
-            var part = new EXRPart(header, version.IsSinglePartTiled);
+            var part = new EXRPart(header, version.IsSinglePartTiled, readOptions);
             var dataReader = new EXRPartDataReader(part, version, reader, partOffsetTableOffset);
             part.AssignDataReader(dataReader);
             AddPart(part);
@@ -267,7 +291,7 @@ public class EXRFile : IDisposable
 
         foreach (var part in parts)
         {
-            part.Validate(version.IsMultiPart, version.HasNonImageParts);
+            part.ValidateAttributes(version.IsMultiPart, version.HasNonImageParts);
         }
     }
 

@@ -1,5 +1,6 @@
 ﻿using Jither.OpenEXR.Attributes;
 using Jither.OpenEXR.Compression;
+using System.ComponentModel.DataAnnotations;
 
 namespace Jither.OpenEXR;
 
@@ -7,12 +8,23 @@ public class EXRPart
 {
     private readonly EXRHeader header;
     private readonly bool isSinglePartTiled;
+    private readonly EXRReadOptions? readOptions;
     private EXRFile? file;
 
+    /// <summary>
+    /// Attributes required by spec and which will be required even in lax mode.
+    /// </summary>
     public static readonly string[] RequiredAttributes = new[] {
         AttributeNames.Channels,
         AttributeNames.Compression,
-        AttributeNames.DataWindow,
+        AttributeNames.DataWindow
+    };
+
+    /// <summary>
+    /// These attributes are strictly required by the spec, but sometimes left out.
+    /// </summary>
+    public static readonly string[] StrictlyRequiredAttributes = new[]
+    {
         AttributeNames.DisplayWindow,
         AttributeNames.LineOrder,
         AttributeNames.PixelAspectRatio,
@@ -24,6 +36,14 @@ public class EXRPart
         AttributeNames.Name,
         AttributeNames.Type,
         AttributeNames.ChunkCount,
+    };
+
+    private static readonly Dictionary<string, EXRAttribute> defaultAttributes = new()
+    {
+        [AttributeNames.LineOrder] = new EXRAttribute<LineOrder>(AttributeNames.LineOrder, LineOrder.IncreasingY),
+        [AttributeNames.PixelAspectRatio] = new EXRAttribute<float>(AttributeNames.PixelAspectRatio, 1),
+        [AttributeNames.ScreenWindowCenter] = new EXRAttribute<V2f>(AttributeNames.ScreenWindowCenter, new V2f(0, 0)),
+        [AttributeNames.ScreenWindowWidth] = new EXRAttribute<float>(AttributeNames.ScreenWindowWidth, 1)
     };
 
     public IReadOnlyList<EXRAttribute> Attributes => header.Attributes;
@@ -223,9 +243,10 @@ public class EXRPart
         header.ScreenWindowWidth = 1;
     }
 
-    internal EXRPart(EXRHeader header, bool isSinglePartTiled)
+    internal EXRPart(EXRHeader header, bool isSinglePartTiled, EXRReadOptions readOptions)
     {
         this.header = header;
+        this.readOptions = readOptions;
         this.isSinglePartTiled = isSinglePartTiled;
     }
 
@@ -302,11 +323,17 @@ public class EXRPart
     }
 
     /// <summary>
-    /// Does rudimentary validation of the part in preparation for writing.
-    /// This method is called by the library before writing files, and will throw <see cref="EXRFormatException"/>
-    /// in case of any issues.
+    /// Does validation of the part's attributes in preparation for reading its data or writing a file.
+    /// This method is called by the library before reading data from a part or writing a file, and
+    /// will throw <see cref="EXRFormatException"/> in case of any issues.
     /// </summary>
-    public void Validate(bool fileIsMultiPart, bool fileHasDeepData)
+    /// <remarks>
+    /// Note that the point of validation is intentionally asymmetric between reading and writing: The library will
+    /// only validate parts when their contained data is read, but, at write time, will validate parts early - before
+    /// writing any file contents at all. This allows opening and analyzing files with e.g. attribute issues, but will
+    /// fail fast if trying to write a file with issues in its parts.
+    /// </remarks>
+    public void ValidateAttributes(bool fileIsMultiPart, bool fileHasDeepData)
     {
         foreach (var requiredAttribute in RequiredAttributes)
         {
@@ -315,7 +342,32 @@ public class EXRPart
                 throw new EXRFormatException($"Part '{Name}' is missing required attribute '{requiredAttribute}'.");
             }
         }
-        
+
+        foreach (var requiredAttribute in StrictlyRequiredAttributes)
+        {
+            if (!header.HasAttribute(requiredAttribute))
+            {
+                // When reading, we allow the user to disable the strict requirements
+                if (readOptions?.StrictAttributeRequirements == false)
+                {
+                    // Set the attribute to its default value. It's created here, so will also be added to any output.
+                    if (requiredAttribute == AttributeNames.DisplayWindow)
+                    {
+                        // We already checked that DataWindow exists
+                        header.SetAttribute(new EXRAttribute<Box2i>(AttributeNames.DisplayWindow, DataWindow));
+                    }
+                    else
+                    {
+                        header.SetAttribute(defaultAttributes[requiredAttribute]);
+                    }
+                }
+                else
+                {
+                    throw new EXRFormatException($"Part '{Name}' is missing required attribute '{requiredAttribute}'.");
+                }
+            }
+        }
+
         if (fileIsMultiPart || fileHasDeepData)
         {
             foreach (var requiredAttribute in RequiredMultiPartAttributes)
@@ -352,6 +404,35 @@ public class EXRPart
             if (!header.HasAttribute(AttributeNames.MaxSamplesPerPixel))
             {
                 throw new EXRFormatException($"Part '{Name}' is missing '{AttributeNames.MaxSamplesPerPixel}' attribute required for deep data parts.");
+            }
+        }
+
+        Channels.Validate();
+        DisplayWindow.Validate("DisplayWindow");
+        DataWindow.Validate("DataWindow");
+
+        if (readOptions?.MaxImageWidth > 0 && DataWindow.Width > readOptions?.MaxImageWidth)
+        {
+            throw new EXRFormatException($"Image width ({DataWindow.Width}) exceeds the maximum width of {readOptions?.MaxImageWidth}.");
+        }
+
+        if (readOptions?.MaxImageHeight > 0 && DataWindow.Height > readOptions?.MaxImageHeight)
+        {
+            throw new EXRFormatException($"Image height ({DataWindow.Height}) exceeds the maximum height of {readOptions?.MaxImageHeight}.");
+        }
+
+        if (IsTiled)
+        {
+            if (Channels.AreSubsampled)
+            {
+                throw new EXRFormatException($"Tiled images cannot use sub-sampling.");
+            }
+        }
+        else
+        {
+            if (LineOrder == LineOrder.Random)
+            {
+                throw new EXRFormatException($"Scanline based images cannot use random chunk order.");
             }
         }
     }

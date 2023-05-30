@@ -11,17 +11,41 @@ public abstract class EXRPartDataHandler
     protected readonly EXRPart part;
     protected readonly Compressor compressor;
     public int ChunkCount { get; }
-    protected readonly bool isMultiPart;
+    protected readonly bool fileIsMultiPart;
+    protected readonly bool fileHasDeepData;
 
     protected int PixelsPerScanLine => part.DataWindow.Width;
 
     /// <summary>
-    /// Returns the number of bytes needed to contain the part's complete pixel data
+    /// Returns the number of bytes needed to contain the part's complete pixel data.
     /// </summary>
+    /// <remarks>
+    /// This will throw <see cref="EXRFormatException"/> for byte counts above 2GB. A .NET array wouldn't be able to hold the complete image.
+    /// OpenEXR limits individual chunks to 2GB, but has no such limitation for the complete image. In order to read an image larger than this, use
+    /// <seealso cref="GetTotalByteCountLarge"/> and process each chunk individually.
+    /// </remarks>
     public int GetTotalByteCount()
     {
+        try
+        {
+            var bounds = part.DataWindow.ToBounds();
+            return part.Channels.GetByteCount(bounds);
+        }
+        catch (OverflowException ex)
+        {
+            throw new EXRFormatException($"Byte count of part '{part.Name}' exceeds 2GB", ex);
+        }
+    }
+
+    /// <summary>
+    /// Returns the number of bytes needed to contain the part's complete pixel data. Unlike <see cref="GetTotalByteCount"/>, this allows computing
+    /// sizes (way) larger than 2GB.
+    /// </summary>
+    /// <returns></returns>
+    public ulong GetTotalByteCountLarge()
+    {
         var bounds = part.DataWindow.ToBounds();
-        return part.Channels.GetByteCount(bounds);
+        return part.Channels.GetByteCountLarge(bounds);
     }
 
     protected void CheckInterleavedPrerequisites()
@@ -35,7 +59,14 @@ public abstract class EXRPartDataHandler
     protected int GetChunkByteCount(ChunkInfo chunkInfo)
     {
         var bounds = GetBounds(chunkInfo);
-        return part.Channels.GetByteCount(bounds);
+        try
+        {
+            return part.Channels.GetByteCount(bounds);
+        }
+        catch (OverflowException ex)
+        {
+            throw new EXRFormatException($"Combined byte count of {chunkInfo} exceeds 2GB", ex);
+        }
     }
 
     protected int GetChunkScanLineCount(ChunkInfo chunkInfo)
@@ -82,6 +113,9 @@ public abstract class EXRPartDataHandler
     {
         this.part = part;
 
+        fileIsMultiPart = version.IsMultiPart;
+        fileHasDeepData = version.HasNonImageParts;
+
         compressor = part.Compression switch
         {
             EXRCompression.None => new NullCompressor(),
@@ -92,9 +126,7 @@ public abstract class EXRPartDataHandler
             _ => new UnsupportedCompressor(part.Compression)
         };
         
-        isMultiPart = version.IsMultiPart;
-
-        if (isMultiPart)
+        if (fileIsMultiPart)
         {
             ChunkCount = part.GetAttributeOrThrow<int>("chunkCount");
         }

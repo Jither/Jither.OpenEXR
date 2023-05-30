@@ -135,7 +135,7 @@ public class EXRPartDataWriter : EXRPartDataHandler
 
     private long WriteChunkHeader(ChunkInfo chunkInfo)
     {
-        if (isMultiPart)
+        if (fileIsMultiPart)
         {
             writer.WriteInt(chunkInfo.PartNumber);
         }

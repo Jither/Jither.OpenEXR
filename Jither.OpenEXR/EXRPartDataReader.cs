@@ -33,6 +33,8 @@ public class EXRPartDataReader : EXRPartDataHandler
 
     public void Read(byte[] dest)
     {
+        part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
+
         if (dest == null)
         {
             throw new ArgumentNullException(nameof(dest));
@@ -55,6 +57,10 @@ public class EXRPartDataReader : EXRPartDataHandler
 
     public void ReadInterleaved(byte[] dest, IEnumerable<string> channelOrder)
     {
+        part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
+
+        CheckInterleavedPrerequisites();
+
         if (dest == null)
         {
             throw new ArgumentNullException(nameof(dest));
@@ -63,20 +69,30 @@ public class EXRPartDataReader : EXRPartDataHandler
         int offset = 0;
         for (int i = 0; i < ChunkCount; i++)
         {
-            ChunkInfo chunkInfo = ReadChunkInterleaved(i, dest, channelOrder, offset);
+            ChunkInfo chunkInfo = InternalReadChunkInterleaved(i, dest, channelOrder, offset);
             offset += chunkInfo.UncompressedByteCount;
         }
     }
 
     public void ReadChunk(int chunkIndex, byte[] dest, int destOffset = 0)
     {
+        part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
+
         var chunkInfo = ReadChunkHeader(chunkIndex);
         InternalReadChunk(chunkInfo, dest, destOffset);
     }
 
     public ChunkInfo ReadChunkInterleaved(int chunkIndex, byte[] dest, IEnumerable<string> channelOrder, int offset = 0)
     {
+        part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
+
         CheckInterleavedPrerequisites();
+
+        return InternalReadChunkInterleaved(chunkIndex, dest, channelOrder, offset);
+    }
+
+    private ChunkInfo InternalReadChunkInterleaved(int chunkIndex, byte[] dest, IEnumerable<string> channelOrder, int offset)
+    {
         var chunkInfo = ReadChunkHeader(chunkIndex);
 
         // Offsets are always ordered with scanlines from top to bottom (INCREASING_Y). However, the order of the scanlines themselves within the file
@@ -137,8 +153,9 @@ public class EXRPartDataReader : EXRPartDataHandler
     private ChunkInfo ReadChunkHeader(int chunkIndex)
     {
         var offset = OffsetTable[chunkIndex];
-        reader.Seek((long)offset);
-        int partNumber = isMultiPart ? reader.ReadInt() : 0;
+
+        reader.Seek(offset);
+        int partNumber = fileIsMultiPart ? reader.ReadInt() : 0;
 
         ChunkInfo chunkInfo;
         if (IsTiled)

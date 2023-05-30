@@ -29,6 +29,7 @@ public class EXRReader : IDisposable
     }
 
     public long Position => reader.BaseStream.Position;
+    public long Length => reader.BaseStream.Length;
     public long Remaining => reader.BaseStream.Length - reader.BaseStream.Position;
 
     public byte ReadByte() => reader.ReadByte();
