@@ -257,7 +257,7 @@ public class PizCompressor : Compressor
 
             if (minNonZeroIndex >= BITMAP_SIZE || maxNonZeroIndex >= BITMAP_SIZE)
             {
-                throw new CompressionException($"Error in PIZ data: min/max non-zero indices exceed bitmap size");
+                throw new EXRCompressionException($"Error in PIZ data: min/max non-zero indices exceed bitmap size");
             }
 
             byte[] bitmap = ArrayPool<byte>.Shared.Rent(BITMAP_SIZE);

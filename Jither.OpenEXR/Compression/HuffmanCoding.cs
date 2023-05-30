@@ -4,21 +4,6 @@ using System.Runtime.CompilerServices;
 
 namespace Jither.OpenEXR.Compression;
 
-public class PizException : EXRFormatException
-{
-    public PizException(string message) : base(message)
-    {
-    }
-}
-
-public class PizHuffmanException : EXRFormatException
-{
-    public PizHuffmanException(string message) : base(message)
-    {
-
-    }
-}
-
 public static class HuffmanCoding
 {
     private const int HUF_ENCBITS = 16;
@@ -83,23 +68,27 @@ public static class HuffmanCoding
     {
         const int headerSize = 5 * sizeof(uint);
 
+        if (compressed.Length < headerSize)
+        {
+            throw new EXRCompressionException($"PIZ Huffman coding header truncated");
+        }
         var headerSpan = compressed.AsSpan(0, headerSize);
-        var minIndex = (int)BinaryPrimitives.ReadUInt32LittleEndian(headerSpan[..4]);
-        var maxIndex = (int)BinaryPrimitives.ReadUInt32LittleEndian(headerSpan.Slice(4, 4));
+        var minIndex = (uint)BinaryPrimitives.ReadUInt32LittleEndian(headerSpan[..4]);
+        var maxIndex = (uint)BinaryPrimitives.ReadUInt32LittleEndian(headerSpan.Slice(4, 4));
         var tableLength = BinaryPrimitives.ReadUInt32LittleEndian(headerSpan.Slice(8, 4));
         var bitCount = BinaryPrimitives.ReadUInt32LittleEndian(headerSpan.Slice(12, 4));
         var _ = BinaryPrimitives.ReadUInt32LittleEndian(headerSpan.Slice(16, 4));
 
         if (minIndex >= HUF_ENCSIZE || maxIndex >= HUF_ENCSIZE)
         {
-            throw new PizHuffmanException("Invalid table size");
+            throw new EXRCompressionException($"PIZ invalid Huffman table size ({minIndex}..{maxIndex} exceeds encoding table size of {HUF_ENCSIZE})");
         }
 
         int compressedDataSize = compressedByteSize - headerSize;
         int byteCount = (int)((bitCount + 7) / 8);
         if (byteCount > compressedDataSize)
         {
-            throw new PizHuffmanException($"Declared bitcount ({bitCount} bits = {byteCount} bytes) does not fit in Huffman table+data length ({compressedDataSize} bytes)");
+            throw new EXRCompressionException($"PIZ declared bitcount ({bitCount} bits = {byteCount} bytes) does not fit in Huffman table+data length ({compressedDataSize} bytes)");
         }
 
         using (var stream = new MemoryStream(compressed, 0, compressedByteSize))
@@ -192,7 +181,7 @@ public static class HuffmanCoding
         {
             if (count > BufferBitCount)
             {
-                throw new PizHuffmanException($"Corrupt PIZ chunk");
+                throw new EXRCompressionException($"PIZ corrupt chunk - attempt to advance beyond bit buffer.");
             }
             BufferBitCount -= count;
         }
@@ -207,20 +196,24 @@ public static class HuffmanCoding
             return (buffer >> BufferBitCount) & ((1u << count) - 1);
         }
 
-        public int ReadCode(int code, int runLengthCode, Span<ushort> dest, int destIndex)
+        public int ReadCode(uint code, uint runLengthCode, Span<ushort> dest, int destIndex)
         {
             int startDestIndex = destIndex;
             if (code == runLengthCode)
             {
+                if (destIndex == 0)
+                {
+                    throw new EXRCompressionException($"PIZ corrupt chunk - found run length code at start of data.");
+                }
                 BufferByteIfNeeded();
                 BufferBitCount -= 8;
-                uint repetitions = (byte)(buffer >> BufferBitCount);
-                if (destIndex + repetitions > dest.Length)
+                uint runLength = (byte)(buffer >> BufferBitCount);
+                if (destIndex + runLength > dest.Length)
                 {
-                    throw new PizHuffmanException("Too much data");
+                    throw new EXRCompressionException($"PIZ corrupt chunk - run length of ({runLength}) exceeds decompressed length.");
                 }
                 ushort repeatedCode = dest[destIndex - 1];
-                for (ulong i = 0; i < repetitions; i++)
+                for (ulong i = 0; i < runLength; i++)
                 {
                     dest[destIndex++] = repeatedCode;
                 }
@@ -231,7 +224,7 @@ public static class HuffmanCoding
             }
             else
             {
-                throw new PizHuffmanException("Too much data");
+                throw new EXRCompressionException("PIZ corrupt chunk - data exceeds decompressed length.");
             }
             return destIndex - startDestIndex;
         }
@@ -299,8 +292,8 @@ public static class HuffmanCoding
     private class HufDec
     {
         public int ShortLength { get; set; }
-        public int ShortCode { get; set; }
-        public List<int> LongCode { get; } = new(2);
+        public uint ShortCode { get; set; }
+        public List<uint> LongCode { get; } = new(2);
 
         public override string ToString()
         {
@@ -598,49 +591,50 @@ public static class HuffmanCoding
         bits.Flush();
     }
 
-    private static ulong[] UnpackEncodingTable(BitStreamer packed, int min, int max)
+    private static ulong[] UnpackEncodingTable(BitStreamer packed, uint min, uint max)
     {
         ulong[] unpacked = new ulong[HUF_ENCSIZE];
 
-        while (min <= max)
+        uint position = min;
+        while (position <= max)
         {
-            unpacked[min] = packed.ReadBits(6);
-            int codeLength = (int)unpacked[min];
+            unpacked[position] = packed.ReadBits(6);
+            int codeLength = (int)unpacked[position];
 
             if (codeLength == LONG_ZEROCODE_RUN)
             {
                 int zeroRun = (int)packed.ReadBits(8) + SHORTEST_LONG_RUN;
 
-                if (min + zeroRun > max + 1)
+                if (position + zeroRun > max + 1)
                 {
-                    throw new PizHuffmanException($"Corrupt PIZ chunk");
+                    throw new EXRCompressionException($"PIZ corrupt packed encoding table - long zero code run ({zeroRun}) exceeds declared max table index {max}");
                 }
 
                 for (int i = 0; i < zeroRun; i++)
                 {
-                    unpacked[min++] = 0;
+                    unpacked[position++] = 0;
                 }
 
-                min--;
+                position--;
             }
             else if (codeLength >= SHORT_ZEROCODE_RUN)
             {
-                int duplicationCount = codeLength - SHORT_ZEROCODE_RUN + 2;
+                int zeroRun = codeLength - SHORT_ZEROCODE_RUN + 2;
 
-                if (min + duplicationCount > max + 1)
+                if (position + zeroRun > max + 1)
                 {
-                    throw new PizHuffmanException($"Corrupt PIZ chunk");
+                    throw new EXRCompressionException($"PIZ packed encoding table - short zero code run ({zeroRun}) exceeds declared max table index {max}");
                 }
 
-                for (int i = 0; i < duplicationCount; i++)
+                for (int i = 0; i < zeroRun; i++)
                 {
-                    unpacked[min++] = 0;
+                    unpacked[position++] = 0;
                 }
 
-                min--;
+                position--;
             }
 
-            min++;
+            position++;
         }
 
         packed.Reset();
@@ -654,23 +648,24 @@ public static class HuffmanCoding
     //	- long code entry allocations are not optimized, because long codes are
     //	  unfrequent;
     //	- decoding tables are used by Decode();
-    private static HufDec[] BuildDecodingTable(ulong[] frequencies, int min, int max)
+    private static HufDec[] BuildDecodingTable(ulong[] frequencies, uint min, uint max)
     {
         // Init hashtable & loop on all codes.
         // Assumes that hufClearDecTable(hdecod) has already been called.
         var result = new HufDec[HUF_DECSIZE];
 
-        for (int i = min; i <= max; i++)
+        for (uint i = min; i <= max; i++)
         {
-            ulong c = HufCode(frequencies[i]);
-            int codeLength = HufLength(frequencies[i]);
+            ulong frequency = frequencies[i];
+            ulong c = HufCode(frequency);
+            int codeLength = HufLength(frequency);
 
             if ((c >> codeLength) != 0)
             {
                 // Error: c is supposed to be an l-bit code,
                 // but c contains a value that is greater
                 // than the largest l-bit number.
-                throw new PizHuffmanException("Invalid table entry");
+                throw new EXRCompressionException($"PIZ corrupt encoding table - invalid Huffman code {c} from frequency {frequency}");
             }
 
             if (codeLength > HUF_DECBITS)
@@ -682,7 +677,7 @@ public static class HuffmanCoding
                 {
                     // Error: a short code has already
                     // been stored in table entry.
-                    throw new PizHuffmanException("Short code already stored");
+                    throw new EXRCompressionException($"PIZ corrupt encoding table - multiple meanings of Huffman code {c}");
                 }
 
                 hdec.LongCode.Add(i);
@@ -704,7 +699,7 @@ public static class HuffmanCoding
                         // Error: a short code or a long code has
                         // already been stored in table entry.
 
-                        throw new PizHuffmanException("Short or long code already stored");
+                        throw new EXRCompressionException($"PIZ corrupt encoding table - multiple meanings of Huffman code {c}");
                     }
 
                     hdec.ShortLength = codeLength;
@@ -746,7 +741,7 @@ public static class HuffmanCoding
         return bitsWritten;
     }
 
-    private static void Decode(ulong[] encodingTable, HufDec[] decodingTable, BitStreamer compressed, Span<ushort> decompressed, ulong bitLength, int runLengthCode)
+    private static void Decode(ulong[] encodingTable, HufDec[] decodingTable, BitStreamer compressed, Span<ushort> decompressed, ulong bitLength, uint runLengthCode)
     {
         int destIndex = 0;
 
@@ -784,9 +779,10 @@ public static class HuffmanCoding
                             break;
                         }
                     }
+
                     if (j == longCode.Count)
                     {
-                        throw new PizHuffmanException($"Corrupt PIZ chunk");
+                        throw new EXRCompressionException($"PIZ corrupt chunk - encoding table didn't contain long code for {hdecIndex}");
                     }
                 }
 
@@ -810,7 +806,7 @@ public static class HuffmanCoding
             }
             else
             {
-                throw new PizHuffmanException($"Corrupt PIZ chunk");
+                throw new EXRCompressionException($"PIZ corrupt chunk - encoding table didn't contain short code for {hdecIndex}");
             }
         }
     }

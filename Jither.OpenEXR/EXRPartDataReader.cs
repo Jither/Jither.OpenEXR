@@ -143,6 +143,10 @@ public class EXRPartDataReader : EXRPartDataHandler
         ChunkInfo chunkInfo;
         if (IsTiled)
         {
+            if (reader.Remaining < 16)
+            {
+                throw new EXRFormatException($"Truncated chunk header - expected at least 16 bytes, was: {reader.Remaining}");
+            }
             int x = reader.ReadInt();
             int y = reader.ReadInt();
             int levelX = reader.ReadInt();
@@ -151,6 +155,10 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
         else
         {
+            if (reader.Remaining < 4)
+            {
+                throw new EXRFormatException($"Truncated chunk header - expected at least 4 bytes, was: {reader.Remaining}");
+            }
             int y = reader.ReadInt();
             chunkInfo = new ScanlineChunkInfo(chunkIndex, partNumber, y);
         }
@@ -168,6 +176,11 @@ public class EXRPartDataReader : EXRPartDataHandler
     {
         reader.Seek(chunkInfo.PixelDataFileOffset);
         var chunkStream = reader.GetChunkStream(chunkInfo.CompressedByteCount);
+
+        if (destIndex + chunkInfo.UncompressedByteCount > dest.Length)
+        {
+            throw new EXRFormatException($"Uncompressed byte count for {chunkInfo} ({chunkInfo.UncompressedByteCount}) exceeds expected size (max {dest.Length - destIndex}");
+        }
 
         using (var destStream = new MemoryStream(dest, destIndex, chunkInfo.UncompressedByteCount))
         {

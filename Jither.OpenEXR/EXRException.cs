@@ -22,9 +22,14 @@ public class EXRFormatException : EXRException
     }
 }
 
-public class CompressionException : EXRException
+public class EXRCompressionException : EXRFormatException
 {
-    public CompressionException(string message) : base(message)
+    public EXRCompressionException(string message) : base(message)
+    {
+
+    }
+
+    public EXRCompressionException(string message, Exception innerException) : base(message, innerException)
     {
 
     }

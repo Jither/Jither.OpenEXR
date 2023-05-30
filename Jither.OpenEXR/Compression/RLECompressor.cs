@@ -112,6 +112,10 @@ public class RLECompressor : Compressor
                 if (runCount < 0)
                 {
                     runCount = -runCount;
+                    if (source.Length - source.Position < runCount)
+                    {
+                        throw new EXRCompressionException($"RLE run count of {runCount} would read beyond end of stream");
+                    }
                     source.ReadExactly(buffer, bufferIndex, runCount);
                     bufferIndex += runCount;
                 }
@@ -120,7 +124,7 @@ public class RLECompressor : Compressor
                     var value = source.ReadByte();
                     if (value < 0)
                     {
-                        throw new CompressionException($"Expected RLE value, but end of stream reached");
+                        throw new EXRCompressionException($"Expected RLE value, but end of stream reached");
                     }
                     Array.Fill(buffer, (byte)value, bufferIndex, runCount + 1);
                     bufferIndex += runCount + 1;

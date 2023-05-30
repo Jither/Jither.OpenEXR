@@ -45,7 +45,14 @@ public class ZipSCompressor : Compressor
         {
             using (var zlib = new ZLibStream(source, CompressionMode.Decompress, leaveOpen: true))
             {
-                zlib.ReadExactly(buffer, 0, length);
+                try
+                {
+                    zlib.ReadExactly(buffer, 0, length);
+                }
+                catch (Exception ex) when (ex is InvalidDataException or ArgumentOutOfRangeException)
+                {
+                    throw new EXRCompressionException($"Invalid zlib compressed data", ex);
+                }
             }
 
             UnpredictAndReorder(buffer, length);

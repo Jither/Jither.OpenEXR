@@ -29,6 +29,7 @@ public class EXRReader : IDisposable
     }
 
     public long Position => reader.BaseStream.Position;
+    public long Remaining => reader.BaseStream.Length - reader.BaseStream.Position;
 
     public byte ReadByte() => reader.ReadByte();
     public short ReadShort() => reader.ReadInt16();
@@ -81,6 +82,10 @@ public class EXRReader : IDisposable
     public string ReadString(int length)
     {
         long remaining = reader.BaseStream.Length - reader.BaseStream.Position;
+        if (length <= 0)
+        {
+            throw new EXRFormatException($"Error reading text/string: Specified length wasn't a positive integer (was: {length})");
+        }
         if (length > remaining)
         {
             throw new EXRFormatException($"Error reading text/string: Length ({length}) is larger than remaining file size ({remaining})");

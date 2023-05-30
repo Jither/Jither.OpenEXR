@@ -46,6 +46,11 @@ public class SubStream : Stream
 
     public override int Read(byte[] buffer, int offset, int count)
     {
+        if (count < 0)
+        {
+            // Why is .NET's Stream.Read count parameter even an unsigned integer? 
+            throw new ArgumentOutOfRangeException(nameof(count), "count cannot be negative");
+        }
         baseStream.Position = baseOffset + position;
         count = (int)Math.Min(count, length - position);
         int bytesRead = baseStream.Read(buffer, offset, count);

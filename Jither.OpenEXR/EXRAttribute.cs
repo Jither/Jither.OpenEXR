@@ -181,6 +181,10 @@ public abstract class EXRAttribute
                     throw new EXRFormatException($"Failed reading channel list '{name}'.", ex);
                 }
             case "preview":
+                if (size < 9)
+                {
+                    throw new EXRFormatException($"Failed reading preview: Contained no preview image data");
+                }
                 return new EXRAttribute<Preview>(name, new Preview(reader.ReadUInt(), reader.ReadUInt(), reader.ReadBytes(size - 8)));
             default:
                 return new EXRAttribute<UnknownValue>(name, new UnknownValue(type, reader.ReadBytes(size)));
