@@ -1,4 +1,5 @@
 ﻿using Jither.OpenEXR.Compression;
+using Jither.OpenEXR.Converters;
 using System.Buffers;
 
 namespace Jither.OpenEXR;
@@ -31,6 +32,13 @@ public class EXRPartDataReader : EXRPartDataHandler
         this.offsetTableOffset = offsetTableOffset;
     }
 
+    /// <summary>
+    /// Reads the image data from the part into a scanline-interleaved array (the standard OpenEXR image data layout).
+    /// </summary>
+    /// <remarks>
+    /// Scanline-interleaved means that channels are stored separately for each scanline and sorted in alphabetical order.
+    /// In other words, a 5x2 pixel RGBA image will be stored as: AAAAA BBBBB GGGGG RRRRR AAAAA BBBBB GGGGG RRRRR.
+    /// </remarks>
     public void Read(byte[] dest)
     {
         part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
@@ -55,7 +63,15 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
     }
 
-    public void ReadInterleaved(byte[] dest, IEnumerable<string> channelOrder)
+    public void ReadChunk(int chunkIndex, byte[] dest, int destOffset = 0)
+    {
+        part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
+
+        var chunkInfo = ReadChunkHeader(chunkIndex);
+        InternalReadChunk(chunkInfo, dest, destOffset);
+    }
+
+    public void ReadInterleaved(byte[] dest, string[] channelOrder)
     {
         part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
 
@@ -66,82 +82,39 @@ public class EXRPartDataReader : EXRPartDataHandler
             throw new ArgumentNullException(nameof(dest));
         }
 
-        int offset = 0;
-        for (int i = 0; i < ChunkCount; i++)
+        var converter = new PixelInterleaveConverter(part.Channels, channelOrder);
+        int destOffset = 0;
+        for (int chunkIndex = 0; chunkIndex < ChunkCount; chunkIndex++)
         {
-            ChunkInfo chunkInfo = InternalReadChunkInterleaved(i, dest, channelOrder, offset);
-            offset += chunkInfo.UncompressedByteCount;
+            var chunkInfo = ReadChunkHeader(chunkIndex);
+            var pixelData = ArrayPool<byte>.Shared.Rent(chunkInfo.UncompressedByteCount);
+            try
+            {
+                InternalReadChunk(chunkInfo, pixelData, 0);
+                converter.FromEXR(chunkInfo.GetBounds(), pixelData, dest, destOffset);
+                destOffset += chunkInfo.UncompressedByteCount;
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(pixelData);
+            }
         }
     }
 
-    public void ReadChunk(int chunkIndex, byte[] dest, int destOffset = 0)
-    {
-        part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
-
-        var chunkInfo = ReadChunkHeader(chunkIndex);
-        InternalReadChunk(chunkInfo, dest, destOffset);
-    }
-
-    public ChunkInfo ReadChunkInterleaved(int chunkIndex, byte[] dest, IEnumerable<string> channelOrder, int offset = 0)
+    public ChunkInfo ReadChunkInterleaved(int chunkIndex, byte[] dest, string[] channelOrder, int destOffset = 0)
     {
         part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
 
         CheckInterleavedPrerequisites();
 
-        return InternalReadChunkInterleaved(chunkIndex, dest, channelOrder, offset);
-    }
+        var converter = new PixelInterleaveConverter(part.Channels, channelOrder);
 
-    private ChunkInfo InternalReadChunkInterleaved(int chunkIndex, byte[] dest, IEnumerable<string> channelOrder, int offset)
-    {
         var chunkInfo = ReadChunkHeader(chunkIndex);
-
-        // Offsets are always ordered with scanlines from top to bottom (INCREASING_Y). However, the order of the scanlines themselves within the file
-        // may be bottom to top or random (see LineOrder). Each scanline block stores its first scanline's y coordinate, meaning it's possible to
-        // read blocks in file sequential order and reconstruct the scanline order - avoiding file seeks. For now, we just follow the
-        // offset order.
-
-        // Collect byte offsets for the channel components in each pixel. I.e., at what byte offset within the channel-interleaved pixel should each channel be stored?
-        var destOffsets = GetInterleaveOffsets(channelOrder, out var interleavedBytesPerPixel);
-
-        var pixelData = ArrayPool<byte>.Shared.Rent(GetChunkByteCount(chunkInfo));
+        var pixelData = ArrayPool<byte>.Shared.Rent(chunkInfo.UncompressedByteCount);
         try
         {
             InternalReadChunk(chunkInfo, pixelData, 0);
-
-            // The decompressed pixel data is stored with channels separated and ordered alphabetically
-            int sourceOffset = 0;
-            int scanlineCount = GetChunkScanLineCount(chunkInfo);
-
-            for (int scanline = 0; scanline < scanlineCount; scanline++)
-            {
-                int channelIndex = 0;
-                int scanlineOffset = offset + scanline * PixelsPerScanLine * interleavedBytesPerPixel;
-
-                foreach (var channel in part.Channels)
-                {
-                    int channelBytesPerPixel = channel.Type.GetBytesPerPixel();
-                    int destOffset = destOffsets[channelIndex++];
-
-                    if (destOffset >= 0)
-                    {
-                        destOffset += scanlineOffset;
-                        for (int i = 0; i < PixelsPerScanLine; i++)
-                        {
-                            for (int j = 0; j < channelBytesPerPixel; j++)
-                            {
-                                dest[destOffset + j] = pixelData[sourceOffset++];
-                            }
-                            destOffset += interleavedBytesPerPixel;
-                        }
-                    }
-                    else
-                    {
-                        // Skip this channel
-                        sourceOffset += PixelsPerScanLine * channelBytesPerPixel;
-                    }
-                }
-            }
-
+            converter.FromEXR(chunkInfo.GetBounds(), pixelData, dest, destOffset);
             return chunkInfo;
         }
         finally
@@ -157,6 +130,11 @@ public class EXRPartDataReader : EXRPartDataHandler
         reader.Seek(offset);
         int partNumber = fileIsMultiPart ? reader.ReadInt() : 0;
 
+        if (partNumber != part.PartNumber)
+        {
+            throw new EXRFormatException($"Read unexpected part number for chunk {chunkIndex}. Reading for part {part.PartNumber} but chunk is for part {partNumber}.");
+        }
+
         ChunkInfo chunkInfo;
         if (IsTiled)
         {
@@ -168,7 +146,7 @@ public class EXRPartDataReader : EXRPartDataHandler
             int y = reader.ReadInt();
             int levelX = reader.ReadInt();
             int levelY = reader.ReadInt();
-            chunkInfo = new TileChunkInfo(chunkIndex, partNumber, x, y, levelX, levelY);
+            chunkInfo = new TileChunkInfo(part, chunkIndex, x, y, levelX, levelY);
         }
         else
         {
@@ -177,11 +155,10 @@ public class EXRPartDataReader : EXRPartDataHandler
                 throw new EXRFormatException($"Truncated chunk header - expected at least 4 bytes, was: {reader.Remaining}");
             }
             int y = reader.ReadInt();
-            chunkInfo = new ScanlineChunkInfo(chunkIndex, partNumber, y);
+            chunkInfo = new ScanlineChunkInfo(part, chunkIndex, y);
         }
 
         chunkInfo.CompressedByteCount = reader.ReadInt();
-        chunkInfo.UncompressedByteCount = GetChunkByteCount(chunkInfo);
 
         chunkInfo.PixelDataFileOffset = reader.Position;
         chunkInfo.FileOffset = offset;
@@ -206,7 +183,7 @@ public class EXRPartDataReader : EXRPartDataHandler
             // implementation in the future.
             var info = new PixelDataInfo(
                 part.Channels,
-                GetBounds(chunkInfo),
+                chunkInfo.GetBounds(),
                 chunkInfo.UncompressedByteCount
             );
 

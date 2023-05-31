@@ -2,7 +2,7 @@
 
 namespace Jither.OpenEXR.Compression;
 
-public static class Wavelet
+internal static class Wavelet
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static (ushort l, ushort h) Encode14(ushort a, ushort b)

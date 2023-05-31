@@ -1,10 +1,11 @@
 ﻿using System.Buffers;
 using System.Buffers.Binary;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace Jither.OpenEXR.Compression;
 
-public static class HuffmanCoding
+internal static class HuffmanCoding
 {
     private const int HUF_ENCBITS = 16;
     private const int HUF_DECBITS = 14;
@@ -122,208 +123,6 @@ public static class HuffmanCoding
     private static ulong HufCode(ulong code)
     {
         return code >> 6;
-    }
-
-    private class BitStreamer
-    {
-        private readonly Stream stream;
-        public long Position => stream.Position;
-        public long RemainingBytes => stream.Length - Position;
-        public int BufferBitCount { get; private set; }
-        private ulong buffer;
-
-        public BitStreamer(Stream stream)
-        {
-            this.stream = stream;
-        }
-
-        public void WriteBits(int count, ulong bits)
-        {
-            buffer <<= count;
-            BufferBitCount += count;
-            buffer |= bits;
-
-            while (BufferBitCount >= 8)
-            {
-                BufferBitCount -= 8;
-                stream.WriteByte((byte)(buffer >> BufferBitCount));
-            }
-        }
-
-        private void WriteCode(ulong code)
-        {
-            WriteBits(HufLength(code), HufCode(code));
-        }
-
-        public void EmitCode(ulong code, int runCount, ulong runCode)
-        {
-            if (HufLength(code) + HufLength(runCode) + 8 < HufLength(code) * runCount)
-            {
-                WriteCode(code);
-                WriteCode(runCode);
-                WriteBits(8, (ulong)runCount);
-            }
-            else
-            {
-                for (int i = 0; i <= runCount; i++)
-                {
-                    WriteCode(code);
-                }
-            }
-        }
-
-        public ulong PeekBits(int count)
-        {
-            return (buffer >> (BufferBitCount - count)) & ((1u << count) - 1);
-        }
-
-        public void Advance(int count)
-        {
-            if (count > BufferBitCount)
-            {
-                throw new EXRCompressionException($"PIZ corrupt chunk - attempt to advance beyond bit buffer.");
-            }
-            BufferBitCount -= count;
-        }
-
-        public ulong ReadBits(int count)
-        {
-            while (BufferBitCount < count)
-            {
-                BufferByte();
-            }
-            BufferBitCount -= count;
-            return (buffer >> BufferBitCount) & ((1u << count) - 1);
-        }
-
-        public int ReadCode(uint code, uint runLengthCode, Span<ushort> dest, int destIndex)
-        {
-            int startDestIndex = destIndex;
-            if (code == runLengthCode)
-            {
-                if (destIndex == 0)
-                {
-                    throw new EXRCompressionException($"PIZ corrupt chunk - found run length code at start of data.");
-                }
-                BufferByteIfNeeded();
-                BufferBitCount -= 8;
-                uint runLength = (byte)(buffer >> BufferBitCount);
-                if (destIndex + runLength > dest.Length)
-                {
-                    throw new EXRCompressionException($"PIZ corrupt chunk - run length of ({runLength}) exceeds decompressed length.");
-                }
-                ushort repeatedCode = dest[destIndex - 1];
-                for (ulong i = 0; i < runLength; i++)
-                {
-                    dest[destIndex++] = repeatedCode;
-                }
-            }
-            else if (destIndex < dest.Length)
-            {
-                dest[destIndex++] = (ushort)code;
-            }
-            else
-            {
-                throw new EXRCompressionException("PIZ corrupt chunk - data exceeds decompressed length.");
-            }
-            return destIndex - startDestIndex;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void BufferByteIfNeeded()
-        {
-            if (BufferBitCount < 8)
-            {
-                BufferByte();
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void BufferByte()
-        {
-            buffer = (buffer << 8) | (byte)stream.ReadByte();
-            BufferBitCount += 8;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void BufferBits(int count)
-        {
-            while(BufferBitCount < count)
-            {
-                BufferByte();
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ulong ReadDecodingTableIndex()
-        {
-            return (buffer >> (BufferBitCount - HUF_DECBITS)) & HUF_DECMASK;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public ulong ReadDecodingTableOffset2()
-        {
-            return (buffer << (HUF_DECBITS - BufferBitCount)) & HUF_DECMASK;
-        }
-
-        public void FinalizeRead(int count)
-        {
-            buffer >>= count;
-            BufferBitCount -= count;
-        }
-
-        public void Reset()
-        {
-            BufferBitCount = 0;
-            buffer = 0;
-        }
-
-        public void Flush()
-        {
-            while (BufferBitCount > 0)
-            {
-                stream.WriteByte((byte)(buffer << (8 - BufferBitCount)));
-                BufferBitCount -= Math.Min(8, BufferBitCount);
-            }
-            Reset();
-        }
-    }
-
-    private class HufDec
-    {
-        public int ShortLength { get; set; }
-        public uint ShortCode { get; set; }
-        public List<uint> LongCode { get; } = new(2);
-
-        public override string ToString()
-        {
-            if (ShortLength != 0)
-            {
-                return $"Short(ShortCode {{ value: {ShortCode}, len: {ShortLength} }})";
-            }
-            return $"Long([{String.Join(", ", LongCode)}])";
-        }
-    }
-
-    private struct HeapFrequency : IComparable<HeapFrequency>
-    {
-        public int Index { get; }
-        public ulong Frequency { get; set; }
-
-        public HeapFrequency(int index, ulong frequency)
-        {
-            Index = index;
-            Frequency = frequency;
-        }
-
-        public int CompareTo(HeapFrequency other)
-        {
-            if (other.Frequency == Frequency)
-            {
-                return Index - other.Index;
-            }
-            return Frequency > other.Frequency ? 1 : -1;
-        }
     }
 
     // Build a "canonical" Huffman code table:
@@ -725,7 +524,7 @@ public static class HuffmanCoding
             }
             else
             {
-                output.EmitCode(frequencies[start], runLength, frequencies[runLengthCode]);
+                output.WriteCode(frequencies[start], runLength, frequencies[runLengthCode]);
                 runLength = 0;
             }
 
@@ -733,7 +532,7 @@ public static class HuffmanCoding
         }
 
         // Emit remaining code
-        output.EmitCode(frequencies[start], runLength, frequencies[runLengthCode]);
+        output.WriteCode(frequencies[start], runLength, frequencies[runLengthCode]);
 
         int bitsWritten = (int)(output.Position - outputStartPosition) * 8 + output.BufferBitCount;
         output.Flush();
@@ -796,7 +595,7 @@ public static class HuffmanCoding
 
         while (compressed.BufferBitCount > 0)
         {
-            ulong hdecIndex = compressed.ReadDecodingTableOffset2();
+            ulong hdecIndex = compressed.ReadDecodingTableIndex2();
             HufDec hdec = decodingTable[hdecIndex];
 
             if (hdec.ShortLength > 0)
@@ -808,6 +607,214 @@ public static class HuffmanCoding
             {
                 throw new EXRCompressionException($"PIZ corrupt chunk - encoding table didn't contain short code for {hdecIndex}");
             }
+        }
+    }
+
+    private sealed class BitStreamer
+    {
+        private readonly Stream stream;
+        public long Position => stream.Position;
+        public long RemainingBytes => stream.Length - Position;
+        public int BufferBitCount { get; private set; }
+        private ulong buffer;
+
+        public BitStreamer(Stream stream)
+        {
+            this.stream = stream;
+        }
+
+        public ulong ReadBits(int count)
+        {
+            while (BufferBitCount < count)
+            {
+                BufferByte();
+            }
+            BufferBitCount -= count;
+            return (buffer >> BufferBitCount) & ((1u << count) - 1);
+        }
+
+        public ulong PeekBits(int count)
+        {
+            return (buffer >> (BufferBitCount - count)) & ((1u << count) - 1);
+        }
+
+        public void WriteBits(int count, ulong bits)
+        {
+            buffer <<= count;
+            BufferBitCount += count;
+            buffer |= bits;
+
+            while (BufferBitCount >= 8)
+            {
+                BufferBitCount -= 8;
+                stream.WriteByte((byte)(buffer >> BufferBitCount));
+            }
+        }
+
+        public int ReadCode(uint code, uint runLengthCode, Span<ushort> dest, int destIndex)
+        {
+            int startDestIndex = destIndex;
+            if (code == runLengthCode)
+            {
+                if (destIndex == 0)
+                {
+                    Error("found run length code at start of data.");
+                }
+                BufferByteIfNeeded();
+                BufferBitCount -= 8;
+                uint runLength = (byte)(buffer >> BufferBitCount);
+                if (destIndex + runLength > dest.Length)
+                {
+                    Error("run length of ({runLength}) exceeds decompressed length.");
+                }
+                ushort repeatedCode = dest[destIndex - 1];
+                for (ulong i = 0; i < runLength; i++)
+                {
+                    dest[destIndex++] = repeatedCode;
+                }
+            }
+            else if (destIndex < dest.Length)
+            {
+                dest[destIndex++] = (ushort)code;
+            }
+            else
+            {
+                Error("data exceeds decompressed length.");
+            }
+            return destIndex - startDestIndex;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ulong ReadDecodingTableIndex()
+        {
+            return (buffer >> (BufferBitCount - HUF_DECBITS)) & HUF_DECMASK;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public ulong ReadDecodingTableIndex2()
+        {
+            return (buffer << (HUF_DECBITS - BufferBitCount)) & HUF_DECMASK;
+        }
+
+        public void WriteCode(ulong code, int runCount, ulong runCode)
+        {
+            if (HufLength(code) + HufLength(runCode) + 8 < HufLength(code) * runCount)
+            {
+                EmitCode(code);
+                EmitCode(runCode);
+                WriteBits(8, (ulong)runCount);
+            }
+            else
+            {
+                for (int i = 0; i <= runCount; i++)
+                {
+                    EmitCode(code);
+                }
+            }
+        }
+
+        public void Advance(int count)
+        {
+            if (count > BufferBitCount)
+            {
+                Error("attempt to advance beyond bit buffer.");
+            }
+            BufferBitCount -= count;
+        }
+
+        public void FinalizeRead(int count)
+        {
+            buffer >>= count;
+            BufferBitCount -= count;
+        }
+
+        public void Reset()
+        {
+            BufferBitCount = 0;
+            buffer = 0;
+        }
+
+        public void Flush()
+        {
+            while (BufferBitCount > 0)
+            {
+                stream.WriteByte((byte)(buffer << (8 - BufferBitCount)));
+                BufferBitCount -= Math.Min(8, BufferBitCount);
+            }
+            Reset();
+        }
+
+        private void EmitCode(ulong code)
+        {
+            WriteBits(HufLength(code), HufCode(code));
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void BufferByteIfNeeded()
+        {
+            if (BufferBitCount < 8)
+            {
+                BufferByte();
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void BufferByte()
+        {
+            buffer = (buffer << 8) | (byte)stream.ReadByte();
+            BufferBitCount += 8;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void BufferBits(int count)
+        {
+            while (BufferBitCount < count)
+            {
+                BufferByte();
+            }
+        }
+
+        [DoesNotReturn]
+        private static void Error(string message)
+        {
+            throw new EXRCompressionException($"PIZ corrupt chunk - {message}");
+        }
+    }
+
+    private class HufDec
+    {
+        public int ShortLength { get; set; }
+        public uint ShortCode { get; set; }
+        public List<uint> LongCode { get; } = new(2);
+
+        public override string ToString()
+        {
+            if (ShortLength != 0)
+            {
+                return $"Short(ShortCode {{ value: {ShortCode}, len: {ShortLength} }})";
+            }
+            return $"Long([{String.Join(", ", LongCode)}])";
+        }
+    }
+
+    private struct HeapFrequency : IComparable<HeapFrequency>
+    {
+        public int Index { get; }
+        public ulong Frequency { get; set; }
+
+        public HeapFrequency(int index, ulong frequency)
+        {
+            Index = index;
+            Frequency = frequency;
+        }
+
+        public int CompareTo(HeapFrequency other)
+        {
+            if (other.Frequency == Frequency)
+            {
+                return Index - other.Index;
+            }
+            return Frequency > other.Frequency ? 1 : -1;
         }
     }
 }

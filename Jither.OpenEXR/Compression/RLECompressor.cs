@@ -2,7 +2,7 @@
 
 namespace Jither.OpenEXR.Compression;
 
-public class RLECompressor : Compressor
+internal sealed class RLECompressor : Compressor
 {
     private const int MAX_RUN_LENGTH = 127;
     private const int MIN_RUN_LENGTH = 3;

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Jither.OpenEXR.Compression;
 
-public class UnsupportedCompressor : Compressor
+internal sealed class UnsupportedCompressor : Compressor
 {
     private readonly EXRCompression type;
 

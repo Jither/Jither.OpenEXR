@@ -8,6 +8,7 @@
   
   <ItemGroup>
     <InternalsVisibleTo Include="Jither.OpenEXR.Tests" />
+    <InternalsVisibleTo Include="Jither.OpenEXR.Benchmarks" />
   </ItemGroup>
 
 </Project>

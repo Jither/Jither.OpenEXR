@@ -1,4 +1,7 @@
-﻿namespace Jither.OpenEXR;
+﻿using Jither.OpenEXR.Attributes;
+using Jither.OpenEXR.Drawing;
+
+namespace Jither.OpenEXR;
 
 public class TileChunkInfo : ChunkInfo
 {
@@ -7,11 +10,21 @@ public class TileChunkInfo : ChunkInfo
     public int LevelX { get; }
     public int LevelY { get; }
 
-    public TileChunkInfo(int index, int partNumber, int x, int y, int levelX, int levelY) : base(index, partNumber)
+    protected TileDesc Tiles => part.Tiles ?? throw new InvalidOperationException($"Expected part to have a tiles attribute.");
+
+    public TileChunkInfo(EXRPart part, int index, int x, int y, int levelX, int levelY) : base(part, index)
     {
         X = x;
         Y = y;
         LevelX = levelX;
         LevelY = levelY;
+    }
+
+    public override Bounds<int> GetBounds()
+    {
+        var dataWindow = part.DataWindow;
+        int width = Math.Min(Tiles.XSize, dataWindow.XMax - X + 1);
+        int height = Math.Min(Tiles.YSize, dataWindow.YMax - Y + 1);
+        return new Bounds<int>(X, Y, width, height);
     }
 }

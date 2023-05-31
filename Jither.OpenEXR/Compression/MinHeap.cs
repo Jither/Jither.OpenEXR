@@ -2,7 +2,7 @@
 
 namespace Jither.OpenEXR.Compression;
 
-internal class MinHeap<T> where T: IComparable<T>
+internal sealed class MinHeap<T> where T: IComparable<T>
 {
     private readonly T[] elements;
     private int count;
@@ -22,13 +22,13 @@ internal class MinHeap<T> where T: IComparable<T>
         }
     }
 
-    private bool IsRoot(int index) => index == 0;
+    private static bool IsRoot(int index) => index == 0;
     private bool HasChildLeft(int index) => GetChildIndexLeft(index) < count;
     private bool HasChildRight(int index) => GetChildIndexRight(index) < count;
 
-    private int GetParentIndex(int index) => (index - 1) / 2;
-    private int GetChildIndexLeft(int index) => 2 * index + 1;
-    private int GetChildIndexRight(int index) => 2 * index + 2;
+    private static int GetParentIndex(int index) => (index - 1) / 2;
+    private static int GetChildIndexLeft(int index) => 2 * index + 1;
+    private static int GetChildIndexRight(int index) => 2 * index + 2;
 
     private T GetParent(int index) => elements[GetParentIndex(index)];
     private T GetChildLeft(int index) => elements[GetChildIndexLeft(index)];

@@ -2,7 +2,7 @@
 
 namespace Jither.OpenEXR.Compression;
 
-public class PixelDataInfo
+public sealed class PixelDataInfo
 {
     public ChannelList Channels { get; }
     public Bounds<int> Bounds { get; }

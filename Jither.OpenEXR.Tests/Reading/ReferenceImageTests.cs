@@ -14,7 +14,7 @@ public class ReferenceImageTests
 {
     private const string BasePath = "../../../images/openexr-images/";
 
-    private void TestReadParts(IEnumerable<EXRPart> parts)
+    private static void TestReadParts(IEnumerable<EXRPart> parts)
     {
         foreach (var part in parts)
         {

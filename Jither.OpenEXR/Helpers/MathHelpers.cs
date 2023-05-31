@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace Jither.OpenEXR.Helpers;
 
-public static class MathHelpers
+internal static class MathHelpers
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static T DivAndRoundUp<T>(T a, T b) where T: IBinaryInteger<T>

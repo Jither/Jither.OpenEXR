@@ -1,6 +1,6 @@
 ﻿namespace Jither.OpenEXR.Compression;
 
-public class NullCompressor : Compressor
+internal sealed class NullCompressor : Compressor
 {
     public static NullCompressor Instance { get; } = new NullCompressor();
 

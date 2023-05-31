@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Jither.OpenEXR.Compression;
 
-public class PizCompressor : Compressor
+internal sealed class PizCompressor : Compressor
 {
     private const int LUT_SIZE = 1 << 16;
     private const int BITMAP_SIZE = LUT_SIZE >> 3;

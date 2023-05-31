@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Jither.OpenEXR.Compression;
 
-public class SubStream : Stream
+internal sealed class SubStream : Stream
 {
     private readonly Stream baseStream;
     private readonly long length;
@@ -48,7 +48,7 @@ public class SubStream : Stream
     {
         if (count < 0)
         {
-            // Why is .NET's Stream.Read count parameter even an unsigned integer? 
+            // Why is .NET's Stream.Read count parameter even a signed integer? 
             throw new ArgumentOutOfRangeException(nameof(count), "count cannot be negative");
         }
         baseStream.Position = baseOffset + position;

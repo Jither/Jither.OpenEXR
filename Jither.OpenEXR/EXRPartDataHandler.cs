@@ -14,8 +14,6 @@ public abstract class EXRPartDataHandler
     protected readonly bool fileIsMultiPart;
     protected readonly bool fileHasDeepData;
 
-    protected int PixelsPerScanLine => part.DataWindow.Width;
-
     /// <summary>
     /// Returns the number of bytes needed to contain the part's complete pixel data.
     /// </summary>
@@ -41,7 +39,6 @@ public abstract class EXRPartDataHandler
     /// Returns the number of bytes needed to contain the part's complete pixel data. Unlike <see cref="GetTotalByteCount"/>, this allows computing
     /// sizes (way) larger than 2GB.
     /// </summary>
-    /// <returns></returns>
     public ulong GetTotalByteCountLarge()
     {
         var bounds = part.DataWindow.ToBounds();
@@ -56,58 +53,7 @@ public abstract class EXRPartDataHandler
         }
     }
 
-    protected int GetChunkByteCount(ChunkInfo chunkInfo)
-    {
-        var bounds = GetBounds(chunkInfo);
-        try
-        {
-            return part.Channels.GetByteCount(bounds);
-        }
-        catch (OverflowException ex)
-        {
-            throw new EXRFormatException($"Combined byte count of {chunkInfo} exceeds 2GB", ex);
-        }
-    }
-
-    protected int GetChunkScanLineCount(ChunkInfo chunkInfo)
-    {
-        if (chunkInfo.Index < ChunkCount - 1)
-        {
-            return compressor.ScanLinesPerChunk;
-        }
-        // Last chunk may not have the full set:
-        int scanlines = part.DataWindow.Height % compressor.ScanLinesPerChunk;
-        if (scanlines == 0)
-        {
-            scanlines = compressor.ScanLinesPerChunk;
-        }
-        return scanlines;
-    }
-
-    protected int GetChunkPixelCount(ChunkInfo chunkInfo)
-    {
-        int scanlines = GetChunkScanLineCount(chunkInfo);
-        return part.DataWindow.Width * scanlines;
-    }
-
     protected bool IsTiled => part.IsTiled;
-
-    protected Bounds<int> GetBounds(ChunkInfo chunkInfo)
-    {
-        if (chunkInfo is ScanlineChunkInfo scanline)
-        {
-            return new Bounds<int>(0, scanline.Y, PixelsPerScanLine, GetChunkScanLineCount(chunkInfo));
-        }
-        else if (chunkInfo is TileChunkInfo tile)
-        {
-            var tileDesc = part.Tiles ?? throw new InvalidOperationException($"Expected part to have a tiles attribute.");
-            var dataWindow = part.DataWindow;
-            int width = Math.Min(tileDesc.XSize, dataWindow.Width - tile.X);
-            int height = Math.Min(tileDesc.YSize, dataWindow.Height - tile.Y);
-            return new Bounds<int>(tile.X, tile.Y, width, height);
-        }
-        throw new NotImplementedException($"Expected chunk info to be scanline or tile");
-    }
 
     protected EXRPartDataHandler(EXRPart part, EXRVersion version)
     {
@@ -149,44 +95,5 @@ public abstract class EXRPartDataHandler
             // or they have a single-part-tiled version flag, handled above. Hence, this must be a scanline part:
             ChunkCount = MathHelpers.DivAndRoundUp(part.DataWindow.Height, compressor.ScanLinesPerChunk);
         }
-    }
-
-    protected List<int> GetInterleaveOffsets(IEnumerable<string> channelOrder, out int bytesPerPixel, bool allChannelsRequired = false)
-    {
-        var channels = part.Channels;
-        var offsets = new List<int>(channels.Count);
-
-        for (int i = 0; i < channels.Count; i++)
-        {
-            offsets.Add(-1);
-        }
-
-        int startOffset = 0;
-        foreach (var outputChannel in channelOrder)
-        {
-            var channelIndex = channels.IndexOf(outputChannel);
-            if (channelIndex < 0)
-            {
-                throw new ArgumentException($"Unknown channel name in interleaved channel order: {outputChannel}. Should be one of: {String.Join(", ", channels.Select(c => c.Name))}", nameof(channelOrder));
-            }
-            var inputChannel = channels[channelIndex];
-            offsets[channelIndex] = startOffset;
-            startOffset += inputChannel.Type.GetBytesPerPixel();
-        }
-
-        if (allChannelsRequired)
-        {
-            for (int i = 0; i < channels.Count; i++)
-            {
-                if (offsets[i] < 0)
-                {
-                    throw new ArgumentException($"Channel order for interleaved chunk is missing channel '{channels[i].Name}'.", nameof(channelOrder));
-                }
-            }
-        }
-
-        // startOffset is now also "magically" the number of bytes per interleaved pixel
-        bytesPerPixel = startOffset;
-        return offsets;
     }
 }
