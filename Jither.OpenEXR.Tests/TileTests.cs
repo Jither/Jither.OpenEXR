@@ -1,10 +1,5 @@
 ﻿using Jither.OpenEXR.Attributes;
 using Jither.OpenEXR.Drawing;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Jither.OpenEXR;
 
@@ -13,66 +8,62 @@ public class TileTests
     [Fact]
     public void TileDesc_calculates_correct_mipmap_level_resolutions_down()
     {
-        var tileDesc = new TileDesc(15, 17, LevelMode.MipMap, RoundingMode.Down);
-        Assert.Collection(tileDesc.Levels,
+        var tileDesc = new TileDesc(16, 16, LevelMode.MipMap, RoundingMode.Down);
+        var tileInfo = tileDesc.GetTileInformation(15, 17);
+        Assert.Collection(tileInfo.Levels,
             level => {
-                Assert.Equal(new Dimensions<int>(15, 17), level.Resolution);
-                Assert.Equal(new Dimensions<int>(15, 17), level.Coverage);
+                Assert.Equal(15, level.Width);
+                Assert.Equal(17, level.Height);
             },
             level => {
-                Assert.Equal(new Dimensions<int>(7, 8), level.Resolution);
-                Assert.Equal(new Dimensions<int>(30, 34), level.Coverage);
+                Assert.Equal(7, level.Width);
+                Assert.Equal(8, level.Height);
             },
             level => {
-                Assert.Equal(new Dimensions<int>(3, 4), level.Resolution);
-                Assert.Equal(new Dimensions<int>(60, 68), level.Coverage);
+                Assert.Equal(3, level.Width);
+                Assert.Equal(4, level.Height);
             },
             level => {
-                Assert.Equal(new Dimensions<int>(1, 2), level.Resolution);
-                Assert.Equal(new Dimensions<int>(120, 136), level.Coverage);
+                Assert.Equal(1, level.Width);
+                Assert.Equal(2, level.Height);
             },
             level => {
-                Assert.Equal(new Dimensions<int>(1, 1), level.Resolution);
-                Assert.Equal(new Dimensions<int>(240, 272), level.Coverage);
+                Assert.Equal(1, level.Width);
+                Assert.Equal(1, level.Height);
             }
         );
-        // Level count is calculated separately from levels (faster, when only level count is needed).
-        // Make sure they match.
-        Assert.Equal(tileDesc.LevelCountX, tileDesc.Levels.Count);
     }
 
     [Fact]
     public void TileDesc_calculates_correct_mipmap_level_resolutions_up()
     {
-        var tileDesc = new TileDesc(15, 17, LevelMode.MipMap, RoundingMode.Up);
-        Assert.Collection(tileDesc.Levels,
+        var tileDesc = new TileDesc(16, 16, LevelMode.MipMap, RoundingMode.Up);
+        var tileInfo = tileDesc.GetTileInformation(15, 17);
+        Assert.Collection(tileInfo.Levels,
             level => {
-                Assert.Equal(new Dimensions<int>(15, 17), level.Resolution);
-                Assert.Equal(new Dimensions<int>(15, 17), level.Coverage);
+                Assert.Equal(15, level.Width);
+                Assert.Equal(17, level.Height);
             },
             level => {
-                Assert.Equal(new Dimensions<int>(8, 9), level.Resolution);
-                Assert.Equal(new Dimensions<int>(30, 34), level.Coverage);
+                Assert.Equal(8, level.Width);
+                Assert.Equal(9, level.Height);
             },
             level => {
-                Assert.Equal(new Dimensions<int>(4, 5), level.Resolution);
-                Assert.Equal(new Dimensions<int>(60, 68), level.Coverage);
+                Assert.Equal(4, level.Width);
+                Assert.Equal(5, level.Height);
             },
             level => {
-                Assert.Equal(new Dimensions<int>(2, 3), level.Resolution);
-                Assert.Equal(new Dimensions<int>(120, 136), level.Coverage);
+                Assert.Equal(2, level.Width);
+                Assert.Equal(3, level.Height);
             },
             level => {
-                Assert.Equal(new Dimensions<int>(1, 2), level.Resolution);
-                Assert.Equal(new Dimensions<int>(240, 272), level.Coverage);
+                Assert.Equal(1, level.Width);
+                Assert.Equal(2, level.Height);
             },
             level => {
-                Assert.Equal(new Dimensions<int>(1, 1), level.Resolution);
-                Assert.Equal(new Dimensions<int>(480, 544), level.Coverage);
+                Assert.Equal(1, level.Width);
+                Assert.Equal(1, level.Height);
             }
         );
-        // Level count is calculated separately from levels (faster, when only level count is needed).
-        // Make sure they match.
-        Assert.Equal(tileDesc.LevelCountX, tileDesc.Levels.Count);
     }
 }

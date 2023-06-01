@@ -14,6 +14,9 @@ public abstract class EXRPartDataHandler
     protected readonly bool fileIsMultiPart;
     protected readonly bool fileHasDeepData;
 
+    protected bool IsTiled => part.IsTiled;
+    protected bool IsScanLine => part.IsScanLine;
+
     /// <summary>
     /// Returns the number of bytes needed to contain the part's complete pixel data.
     /// </summary>
@@ -53,8 +56,6 @@ public abstract class EXRPartDataHandler
         }
     }
 
-    protected bool IsTiled => part.IsTiled;
-
     protected EXRPartDataHandler(EXRPart part, EXRVersion version)
     {
         this.part = part;
@@ -84,9 +85,11 @@ public abstract class EXRPartDataHandler
             ChunkCount = 0;
             int totalWidth = part.DataWindow.Width;
             int totalHeight = part.DataWindow.Height;
-            foreach (var level in tiles.Levels)
+            var tileInfo = tiles.GetTileInformation(totalWidth, totalHeight);
+            foreach (var level in tileInfo.Levels)
             {
-                ChunkCount += MathHelpers.DivAndRoundUp(totalWidth, level.Coverage.Width) * MathHelpers.DivAndRoundUp(totalHeight, level.Coverage.Height);
+                // TODO: Move calculation to TileInformation
+                ChunkCount += MathHelpers.DivAndRoundUp(level.Width, tiles.XSize) * MathHelpers.DivAndRoundUp(level.Height, tiles.YSize);
             }
         }
         else

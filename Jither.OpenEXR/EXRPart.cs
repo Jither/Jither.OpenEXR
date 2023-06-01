@@ -187,9 +187,14 @@ public class EXRPart
     }
 
     /// <summary>
-    /// Indicates whether the part is tiled - that is, whether it has a tiled type attribute or its in a file with a "single part tiled" version bit.
+    /// Indicates whether the part is tiled - that is, whether it has a tiled type attribute or it's in a file with a "single part tiled" version bit.
     /// </summary>
     public bool IsTiled => Type == PartType.TiledImage || Type == PartType.DeepTiled || isSinglePartTiled;
+
+    /// <summary>
+    /// Indicates whether the part is scanline - that is, whether it has a tiled type attribute or it's in a single part file without a "single part tiled" version bit.
+    /// </summary>
+    public bool IsScanLine => !IsTiled;
 
     /// <summary>
     /// Indicates whether the part has R, G and B channels (of any type)

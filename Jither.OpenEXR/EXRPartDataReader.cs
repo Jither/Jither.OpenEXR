@@ -41,6 +41,13 @@ public class EXRPartDataReader : EXRPartDataHandler
     /// </remarks>
     public void Read(Span<byte> dest)
     {
+        if (IsTiled)
+        {
+            // This methods reads the first level of multi-resolution tiled parts
+            Read(dest, 0, 0);
+            return;
+        }
+
         part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
 
         if (dest == null)
@@ -54,13 +61,36 @@ public class EXRPartDataReader : EXRPartDataHandler
             throw new ArgumentException($"Destination array too small ({dest.Length}) to fit pixel data ({totalBytes})");
         }
 
-        int destIndex = 0;
-        for (int i = 0; i < ChunkCount; i++)
+        if (IsScanLine)
         {
-            var chunkInfo = ReadChunkHeader(i);
-            InternalReadChunk(chunkInfo, dest[destIndex..]);
-            destIndex += chunkInfo.UncompressedByteCount;
+            int destIndex = 0;
+            for (int i = 0; i < ChunkCount; i++)
+            {
+                var chunkInfo = ReadChunkHeader(i);
+                InternalReadChunk(chunkInfo, dest[destIndex..]);
+                destIndex += chunkInfo.UncompressedByteCount;
+            }
         }
+    }
+
+    /// <summary>
+    /// Reads the image data from the given multi-resolution level into a scanline-interleaved array (the standard OpenEXR image data layout).
+    /// </summary>
+    public void Read(Span<byte> dest, int xLevel, int yLevel)
+    {
+        if (part.Tiles == null)
+        {
+            throw new InvalidOperationException("Attempt to read tiled level from non-tiled part.");
+        }
+
+        part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
+
+        if (dest == null)
+        {
+            throw new ArgumentNullException(nameof(dest));
+        }
+
+        // TODO: ...
     }
 
     public void ReadChunk(int chunkIndex, Span<byte> dest)
