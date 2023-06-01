@@ -154,6 +154,19 @@ public class PixelInterleaveConverterTests
     }
 
     [Fact]
+    public void Cannot_remove_channels_converting_to_EXR()
+    {
+        // RGB RGB RGB RGB
+        byte[] source = StringToPixelData("AB CD EF   IJ KL MN   QR ST UV   YZ 01 23");
+        byte[] dest = new byte[source.Length - 8]; // No alpha channel = subtract 8 bytes (one half per pixel)
+        var channelList = ChannelList.CreateRGBAHalf();
+
+        var converter = new PixelInterleaveConverter(channelList, "R", "G", "B");
+
+        Assert.Throws<ArgumentException>(() => converter.ToEXR(new Bounds<int>(0, 0, 4, 1), source, dest));
+    }
+
+    [Fact]
     public void Converts_mixed_to_EXR()
     {
         // RGBA RGBA RGBA RGBA - blue is 32-bit

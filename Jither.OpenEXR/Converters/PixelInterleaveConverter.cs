@@ -24,23 +24,27 @@ internal class PixelInterleaveConverter : PixelConverter
 
     public override void ToEXR(Bounds<int> bounds, ReadOnlySpan<byte> source, Span<byte> dest)
     {
+        // We don't allow missing channels when converting *to* EXR - the part's channel list needs to match the pixel data.
+        for (int i = 0; i < channels.Count; i++)
+        {
+            if (channelOrder[i] < 0)
+            {
+                throw new ArgumentException($"Channel order for interleaved chunk is missing channel '{channels[i].Name}'.", nameof(channelOrder));
+            }
+        }
+
         int destOffset = 0;
         int scanlineCount = bounds.Height;
+
         for (int scanline = 0; scanline < scanlineCount; scanline++)
         {
             int channelIndex = 0;
             int scanlineOffset = scanline * bounds.Width * interleavedBytesPerPixel;
+
             foreach (var channel in channels)
             {
                 int channelBytesPerPixel = channel.Type.GetBytesPerPixel();
                 int sourceOffset = channelOrder[channelIndex++];
-
-                if (sourceOffset < 0)
-                {
-                    // Skip channel
-                    // TODO: Check that this is right...
-                    continue;
-                }
 
                 sourceOffset += scanlineOffset;
 
@@ -71,22 +75,22 @@ internal class PixelInterleaveConverter : PixelConverter
                 int channelBytesPerPixel = channel.Type.GetBytesPerPixel();
                 int destOffset = channelOrder[channelIndex++];
 
-                if (destOffset >= 0)
+                if (destOffset < 0)
                 {
-                    destOffset += scanlineOffset;
-                    for (int i = 0; i < bounds.Width; i++)
-                    {
-                        for (int j = 0; j < channelBytesPerPixel; j++)
-                        {
-                            dest[destOffset + j] = source[sourceOffset++];
-                        }
-                        destOffset += interleavedBytesPerPixel;
-                    }
-                }
-                else
-                {
-                    // Skip this channel
+                    // Skip this channel - not part of output
                     sourceOffset += bounds.Width * channelBytesPerPixel;
+                    continue;
+                }
+
+                destOffset += scanlineOffset;
+
+                for (int i = 0; i < bounds.Width; i++)
+                {
+                    for (int j = 0; j < channelBytesPerPixel; j++)
+                    {
+                        dest[destOffset + j] = source[sourceOffset++];
+                    }
+                    destOffset += interleavedBytesPerPixel;
                 }
             }
         }
@@ -112,17 +116,6 @@ internal class PixelInterleaveConverter : PixelConverter
             var inputChannel = channels[channelIndex];
             offsets[channelIndex] = startOffset;
             startOffset += inputChannel.Type.GetBytesPerPixel();
-        }
-
-        if (allChannelsRequired)
-        {
-            for (int i = 0; i < channels.Count; i++)
-            {
-                if (offsets[i] < 0)
-                {
-                    throw new ArgumentException($"Channel order for interleaved chunk is missing channel '{channels[i].Name}'.", nameof(channelOrder));
-                }
-            }
         }
 
         // startOffset is now also "magically" the number of bytes per interleaved pixel
