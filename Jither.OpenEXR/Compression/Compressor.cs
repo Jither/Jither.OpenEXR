@@ -6,20 +6,19 @@ public abstract class Compressor
 {
     public abstract int ScanLinesPerChunk { get; }
 
-    public void Compress(Stream source, Stream dest, PixelDataInfo info)
+    public void Compress(ReadOnlySpan<byte> source, Stream dest, PixelDataInfo info)
     {
         if (InternalCompress(source, dest, info) != CompressionResult.Success)
         {
             if (this is not NullCompressor)
             {
                 // Write uncompressed, e.g. if compression turns out to actually inflate the data.
-                source.Position = 0;
                 NullCompressor.Instance.Compress(source, dest, info);
             }
         }
     }
 
-    public void Decompress(Stream source, Stream dest, PixelDataInfo info)
+    public void Decompress(Stream source, Span<byte> dest, PixelDataInfo info)
     {
         if (this is not NullCompressor && source.Length == info.UncompressedByteSize)
         {
@@ -36,22 +35,22 @@ public abstract class Compressor
         }
     }
 
-    public abstract CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info);
+    public abstract CompressionResult InternalCompress(ReadOnlySpan<byte> source, Stream dest, PixelDataInfo info);
 
-    public abstract void InternalDecompress(Stream source, Stream dest, PixelDataInfo info);
+    public abstract void InternalDecompress(Stream source, Span<byte> dest, PixelDataInfo info);
     
-    protected static void UnpredictAndReorder(byte[] buffer, int length)
+    protected static void UnpredictAndReorder(ReadOnlySpan<byte> source, Span<byte> dest, int length)
     {
         byte[] temp = ArrayPool<byte>.Shared.Rent(length);
         try
         {
             // Convert deltas to actual values
             int t1 = 0;
-            byte previous = temp[1] = buffer[t1];
+            byte previous = temp[1] = source[t1];
             t1++;
             while (t1 < length)
             {
-                sbyte delta = (sbyte)buffer[t1];
+                sbyte delta = (sbyte)source[t1];
                 temp[t1] = previous = (byte)(previous + delta - 128);
                 t1++;
             }
@@ -62,10 +61,10 @@ public abstract class Compressor
             int s = 0;
             while (s < length)
             {
-                buffer[s++] = temp[t1++];
+                dest[s++] = temp[t1++];
                 if (s < length)
                 {
-                    buffer[s++] = temp[t2++];
+                    dest[s++] = temp[t2++];
                 }
             }
         }
@@ -75,40 +74,32 @@ public abstract class Compressor
         }
     }
 
-    protected static void ReorderAndPredict(byte[] buffer, int length)
+    protected static void ReorderAndPredict(ReadOnlySpan<byte> source, Span<byte> dest, int length)
     {
-        byte[] temp = ArrayPool<byte>.Shared.Rent(length);
-        try
+        // Split data into two parts containing the bytes at odd and even offsets, respectively.
+        int t1 = 0;
+        int t2 = (length + 1) / 2;
+        int s = 0;
+
+        while (s < length)
         {
-            // Split data into two parts containing the bytes at odd and even offsets, respectively.
-            int t1 = 0;
-            int t2 = (length + 1) / 2;
-            int s = 0;
-
-            while (s < length)
+            dest[t1++] = source[s++];
+            if (s < length)
             {
-                temp[t1++] = buffer[s++];
-                if (s < length)
-                {
-                    temp[t2++] = buffer[s++];
-                }
-            }
-
-            // Convert values to deltas
-            t1 = 1;
-            byte previous = temp[0];
-            buffer[0] = previous;
-            while (t1 < length)
-            {
-                byte current = temp[t1];
-                int d = (sbyte)(current - previous + 128 + 256);
-                previous = current;
-                buffer[t1++] = (byte)d;
+                dest[t2++] = source[s++];
             }
         }
-        finally
+
+        // Convert values to deltas inplace
+        // index 0 holds the starting value, so unchanged
+        t1 = 1;
+        byte previous = dest[0];
+        while (t1 < length)
         {
-            ArrayPool<byte>.Shared.Return(temp);
+            byte current = dest[t1];
+            int d = (sbyte)(current - previous + 128 + 256);
+            previous = current;
+            dest[t1++] = (byte)d;
         }
     }
 

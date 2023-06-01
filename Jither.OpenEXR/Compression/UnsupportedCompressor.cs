@@ -17,12 +17,12 @@ internal sealed class UnsupportedCompressor : Compressor
         this.type = type;
     }
 
-    public override CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info)
+    public override CompressionResult InternalCompress(ReadOnlySpan<byte> source, Stream dest, PixelDataInfo info)
     {
         throw new NotSupportedException($"{type} compression is not supported.");
     }
 
-    public override void InternalDecompress(Stream source, Stream dest, PixelDataInfo info)
+    public override void InternalDecompress(Stream source, Span<byte> dest, PixelDataInfo info)
     {
         throw new NotSupportedException($"{type} compression is not supported.");
     }

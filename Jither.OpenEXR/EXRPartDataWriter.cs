@@ -23,25 +23,25 @@ public class EXRPartDataWriter : EXRPartDataHandler
         }
     }
 
-    public void Write(byte[] data)
+    public void Write(ReadOnlySpan<byte> source)
     {
         int sourceOffset = 0;
         for (int chunkIndex = 0; chunkIndex < ChunkCount; chunkIndex++)
         {
             int y = chunkIndex * compressor.ScanLinesPerChunk + part.DataWindow.YMin;
             var chunkInfo = new ScanlineChunkInfo(part, chunkIndex, y);
-            int bytesWritten = InternalWriteChunk(chunkInfo, data, sourceOffset);
+            int bytesWritten = InternalWriteChunk(chunkInfo, source[sourceOffset..]);
             sourceOffset += bytesWritten;
         }
     }
 
-    public void WriteChunk(ChunkInfo chunkInfo, byte[] data, int offset = 0)
+    public void WriteChunk(ChunkInfo chunkInfo, ReadOnlySpan<byte> source)
     {
-        CheckWriteCount(chunkInfo, data, offset);
-        InternalWriteChunk(chunkInfo, data, offset);
+        CheckWriteCount(chunkInfo, source);
+        InternalWriteChunk(chunkInfo, source);
     }
 
-    public void WriteInterleaved(byte[] data, string[] channelOrder)
+    public void WriteInterleaved(ReadOnlySpan<byte> source, string[] channelOrder)
     {
         int sourceOffset = 0;
         var converter = new PixelInterleaveConverter(part.Channels, channelOrder);
@@ -52,8 +52,8 @@ public class EXRPartDataWriter : EXRPartDataHandler
             var pixelData = ArrayPool<byte>.Shared.Rent(chunkInfo.UncompressedByteCount);
             try
             {
-                converter.ToEXR(chunkInfo.GetBounds(), data, pixelData, sourceOffset);
-                int bytesWritten = InternalWriteChunk(chunkInfo, pixelData, 0);
+                converter.ToEXR(chunkInfo.GetBounds(), source[sourceOffset..], pixelData);
+                int bytesWritten = InternalWriteChunk(chunkInfo, pixelData);
                 sourceOffset += bytesWritten;
             }
             finally
@@ -63,17 +63,17 @@ public class EXRPartDataWriter : EXRPartDataHandler
         }
     }
 
-    public int WriteChunkInterleaved(ChunkInfo chunkInfo, Span<byte> data, string[] channelOrder, int sourceOffset = 0)
+    public int WriteChunkInterleaved(ChunkInfo chunkInfo, ReadOnlySpan<byte> source, string[] channelOrder)
     {
-        CheckWriteCount(chunkInfo, data, sourceOffset);
+        CheckWriteCount(chunkInfo, source);
         CheckInterleavedPrerequisites();
 
         var converter = new PixelInterleaveConverter(part.Channels, channelOrder);
         var pixelData = ArrayPool<byte>.Shared.Rent(chunkInfo.UncompressedByteCount);
         try
         {
-            converter.ToEXR(chunkInfo.GetBounds(), data, pixelData, sourceOffset);
-            return InternalWriteChunk(chunkInfo, pixelData, 0);
+            converter.ToEXR(chunkInfo.GetBounds(), source, pixelData);
+            return InternalWriteChunk(chunkInfo, pixelData);
         }
         finally
         {
@@ -81,24 +81,21 @@ public class EXRPartDataWriter : EXRPartDataHandler
         }
     }
 
-    private int InternalWriteChunk(ChunkInfo chunkInfo, byte[] data, int dataIndex)
+    private int InternalWriteChunk(ChunkInfo chunkInfo, ReadOnlySpan<byte> source)
     {
         chunkInfo.FileOffset = writer.Position;
 
         long sizeOffset = WriteChunkHeader(chunkInfo);
 
         chunkInfo.PixelDataFileOffset = writer.Position;
-        var dest = writer.GetStream();
+        var destStream = writer.GetStream();
 
-        using (var source = new MemoryStream(data, dataIndex, chunkInfo.UncompressedByteCount))
-        {
-            var info = new PixelDataInfo(
-                part.Channels,
-                chunkInfo.GetBounds(),
-                chunkInfo.UncompressedByteCount
-            );
-            compressor.Compress(source, dest, info);
-        }
+        var info = new PixelDataInfo(
+            part.Channels,
+            chunkInfo.GetBounds(),
+            chunkInfo.UncompressedByteCount
+        );
+        compressor.Compress(source[..chunkInfo.UncompressedByteCount], destStream, info);
 
         var size = (int)(writer.Position - sizeOffset - 4);
         writer.Seek(sizeOffset);
@@ -143,13 +140,13 @@ public class EXRPartDataWriter : EXRPartDataHandler
         return sizeOffset;
     }
 
-    private static void CheckWriteCount(ChunkInfo chunkInfo, Span<byte> sourceData, int sourceIndex)
+    private static void CheckWriteCount(ChunkInfo chunkInfo, ReadOnlySpan<byte> source)
     {
-        int actual = sourceData.Length - sourceIndex;
+        int actual = source.Length;
         int expected = chunkInfo.UncompressedByteCount;
         if (actual < expected)
         {
-            throw new ArgumentException($"Expected chunk to write to be {expected} bytes, but got array (+ index) with {actual} bytes", nameof(sourceData));
+            throw new ArgumentException($"Expected chunk to write to be {expected} bytes, but got span with {actual} bytes", nameof(source));
         }
     }
 }

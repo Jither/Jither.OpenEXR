@@ -39,7 +39,7 @@ public class EXRPartDataReader : EXRPartDataHandler
     /// Scanline-interleaved means that channels are stored separately for each scanline and sorted in alphabetical order.
     /// In other words, a 5x2 pixel RGBA image will be stored as: AAAAA BBBBB GGGGG RRRRR AAAAA BBBBB GGGGG RRRRR.
     /// </remarks>
-    public void Read(byte[] dest)
+    public void Read(Span<byte> dest)
     {
         part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
 
@@ -54,24 +54,24 @@ public class EXRPartDataReader : EXRPartDataHandler
             throw new ArgumentException($"Destination array too small ({dest.Length}) to fit pixel data ({totalBytes})");
         }
 
-        int destOffset = 0;
+        int destIndex = 0;
         for (int i = 0; i < ChunkCount; i++)
         {
             var chunkInfo = ReadChunkHeader(i);
-            InternalReadChunk(chunkInfo, dest, destOffset);
-            destOffset += chunkInfo.UncompressedByteCount;
+            InternalReadChunk(chunkInfo, dest[destIndex..]);
+            destIndex += chunkInfo.UncompressedByteCount;
         }
     }
 
-    public void ReadChunk(int chunkIndex, byte[] dest, int destOffset = 0)
+    public void ReadChunk(int chunkIndex, Span<byte> dest)
     {
         part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
 
         var chunkInfo = ReadChunkHeader(chunkIndex);
-        InternalReadChunk(chunkInfo, dest, destOffset);
+        InternalReadChunk(chunkInfo, dest);
     }
 
-    public void ReadInterleaved(byte[] dest, string[] channelOrder)
+    public void ReadInterleaved(Span<byte> dest, string[] channelOrder)
     {
         part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
 
@@ -83,16 +83,16 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
 
         var converter = new PixelInterleaveConverter(part.Channels, channelOrder);
-        int destOffset = 0;
+        int destIndex = 0;
         for (int chunkIndex = 0; chunkIndex < ChunkCount; chunkIndex++)
         {
             var chunkInfo = ReadChunkHeader(chunkIndex);
             var pixelData = ArrayPool<byte>.Shared.Rent(chunkInfo.UncompressedByteCount);
             try
             {
-                InternalReadChunk(chunkInfo, pixelData, 0);
-                converter.FromEXR(chunkInfo.GetBounds(), pixelData, dest, destOffset);
-                destOffset += chunkInfo.UncompressedByteCount;
+                InternalReadChunk(chunkInfo, pixelData);
+                converter.FromEXR(chunkInfo.GetBounds(), pixelData[..chunkInfo.UncompressedByteCount], dest[destIndex..]);
+                destIndex += chunkInfo.UncompressedByteCount;
             }
             finally
             {
@@ -101,7 +101,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
     }
 
-    public ChunkInfo ReadChunkInterleaved(int chunkIndex, byte[] dest, string[] channelOrder, int destOffset = 0)
+    public ChunkInfo ReadChunkInterleaved(int chunkIndex, Span<byte> dest, string[] channelOrder)
     {
         part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
 
@@ -113,8 +113,8 @@ public class EXRPartDataReader : EXRPartDataHandler
         var pixelData = ArrayPool<byte>.Shared.Rent(chunkInfo.UncompressedByteCount);
         try
         {
-            InternalReadChunk(chunkInfo, pixelData, 0);
-            converter.FromEXR(chunkInfo.GetBounds(), pixelData, dest, destOffset);
+            InternalReadChunk(chunkInfo, pixelData);
+            converter.FromEXR(chunkInfo.GetBounds(), pixelData[..chunkInfo.UncompressedByteCount], dest);
             return chunkInfo;
         }
         finally
@@ -166,28 +166,25 @@ public class EXRPartDataReader : EXRPartDataHandler
         return chunkInfo;
     }
 
-    private void InternalReadChunk(ChunkInfo chunkInfo, byte[] dest, int destIndex)
+    private void InternalReadChunk(ChunkInfo chunkInfo, Span<byte> dest)
     {
         reader.Seek(chunkInfo.PixelDataFileOffset);
         var chunkStream = reader.GetChunkStream(chunkInfo.CompressedByteCount);
 
-        if (destIndex + chunkInfo.UncompressedByteCount > dest.Length)
+        if (chunkInfo.UncompressedByteCount > dest.Length)
         {
-            throw new EXRFormatException($"Uncompressed byte count for {chunkInfo} ({chunkInfo.UncompressedByteCount}) exceeds expected size (max {dest.Length - destIndex}");
+            throw new EXRFormatException($"Uncompressed byte count for {chunkInfo} ({chunkInfo.UncompressedByteCount}) exceeds expected size (max {dest.Length}");
         }
 
-        using (var destStream = new MemoryStream(dest, destIndex, chunkInfo.UncompressedByteCount))
-        {
-            // Yes, compressors could use the length or capacity of the stream rather than
-            // an explicit expectedBytes parameter, but not sure if we'll change this
-            // implementation in the future.
-            var info = new PixelDataInfo(
-                part.Channels,
-                chunkInfo.GetBounds(),
-                chunkInfo.UncompressedByteCount
-            );
+        // Yes, compressors could use the length or capacity of the stream rather than
+        // an explicit expectedBytes parameter, but not sure if we'll change this
+        // implementation in the future.
+        var info = new PixelDataInfo(
+            part.Channels,
+            chunkInfo.GetBounds(),
+            chunkInfo.UncompressedByteCount
+        );
 
-            compressor.Decompress(chunkStream, destStream, info);
-        }
+        compressor.Decompress(chunkStream, dest[..chunkInfo.UncompressedByteCount], info);
     }
 }

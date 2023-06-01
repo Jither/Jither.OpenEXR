@@ -20,7 +20,7 @@ public class PixelInterleaveConverterTests
         var channelList = ChannelList.CreateRGBAHalf();
 
         var converter = new PixelInterleaveConverter(channelList, "R", "G", "B", "A");
-        converter.ToEXR(new Bounds<int>(0, 0, 4, 1), source, dest, 0);
+        converter.ToEXR(new Bounds<int>(0, 0, 4, 1), source, dest);
 
         // AAAA BBBB GGGG RRRR
         var expected = StringToPixelData("GH OP WX 45   EF MN UV 23   CD KL ST 01   AB IJ QR YZ");
@@ -37,7 +37,7 @@ public class PixelInterleaveConverterTests
         var channelList = ChannelList.CreateRGBAHalf();
 
         var converter = new PixelInterleaveConverter(channelList, "R", "G", "B", "A");
-        converter.FromEXR(new Bounds<int>(0, 0, 4, 1), source, dest, 0);
+        converter.FromEXR(new Bounds<int>(0, 0, 4, 1), source, dest);
 
         // RGBA RGBA RGBA RGBA
         var expected = StringToPixelData("AB CD EF GH   IJ KL MN OP   QR ST UV WX   YZ 01 23 45");
@@ -54,7 +54,7 @@ public class PixelInterleaveConverterTests
         var channelList = ChannelList.CreateRGBAFloat();
 
         var converter = new PixelInterleaveConverter(channelList, "R", "G", "B", "A");
-        converter.ToEXR(new Bounds<int>(0, 0, 4, 1), source, dest, 0);
+        converter.ToEXR(new Bounds<int>(0, 0, 4, 1), source, dest);
 
         // AAAA BBBB GGGG RRRR
         var expected = StringToPixelData("MNOP 2345 ijkl yz!?   IJKL YZ01 efgh uvwx   EFGH UVWX abcd qrst  ABCD QRST 6789 mnop");
@@ -71,7 +71,7 @@ public class PixelInterleaveConverterTests
         var channelList = ChannelList.CreateRGBAFloat();
 
         var converter = new PixelInterleaveConverter(channelList, "R", "G", "B", "A");
-        converter.FromEXR(new Bounds<int>(0, 0, 4, 1), source, dest, 0);
+        converter.FromEXR(new Bounds<int>(0, 0, 4, 1), source, dest);
 
         // RGBA RGBA RGBA RGBA
         var expected = StringToPixelData("ABCD EFGH IJKL MNOP   QRST UVWX YZ01 2345   6789 abcd efgh ijkl   mnop qrst uvwx yz!?");
@@ -90,7 +90,7 @@ public class PixelInterleaveConverterTests
         var channelList = ChannelList.CreateRGBAHalf();
 
         var converter = new PixelInterleaveConverter(channelList, "R", "G", "B", "A");
-        converter.ToEXR(new Bounds<int>(0, 0, 2, 2), source, dest, 0);
+        converter.ToEXR(new Bounds<int>(0, 0, 2, 2), source, dest);
 
         // AA BB GG RR
         // AA BB GG RR
@@ -110,7 +110,7 @@ public class PixelInterleaveConverterTests
         var channelList = ChannelList.CreateRGBAHalf();
 
         var converter = new PixelInterleaveConverter(channelList, "R", "G", "B", "A");
-        converter.FromEXR(new Bounds<int>(0, 0, 2, 2), source, dest, 0);
+        converter.FromEXR(new Bounds<int>(0, 0, 2, 2), source, dest);
 
         // RGBA RGBA
         // RGBA RGBA
@@ -128,7 +128,7 @@ public class PixelInterleaveConverterTests
         var channelList = ChannelList.CreateRGBAHalf();
         
         var converter = new PixelInterleaveConverter(channelList, "R", "G", "B");
-        converter.FromEXR(new Bounds<int>(0, 0, 4, 1), source, dest, 0);
+        converter.FromEXR(new Bounds<int>(0, 0, 4, 1), source, dest);
 
         // RGB RGB RGB RGB
         var expected = StringToPixelData("AB CD EF   IJ KL MN   QR ST UV   YZ 01 23");
@@ -145,7 +145,7 @@ public class PixelInterleaveConverterTests
         var channelList = ChannelList.CreateRGBAFloat();
 
         var converter = new PixelInterleaveConverter(channelList, "R", "G", "B");
-        converter.FromEXR(new Bounds<int>(0, 0, 4, 1), source, dest, 0);
+        converter.FromEXR(new Bounds<int>(0, 0, 4, 1), source, dest);
 
         // RGB RGB RGB RGB
         var expected = StringToPixelData("ABCD EFGH IJKL   QRST UVWX YZ01   6789 abcd efgh   mnop qrst uvwx");
@@ -168,7 +168,7 @@ public class PixelInterleaveConverterTests
         };
 
         var converter = new PixelInterleaveConverter(channelList, "R", "G", "B", "A");
-        converter.ToEXR(new Bounds<int>(0, 0, 4, 1), source, dest, 0);
+        converter.ToEXR(new Bounds<int>(0, 0, 4, 1), source, dest);
 
         // AAAA BBBB GGGG RRRR
         var expected = StringToPixelData("IJ ST 23 cd   EFGH OPQR YZ01 89ab   CD MN WX 67   AB KL UV 45");
@@ -191,7 +191,7 @@ public class PixelInterleaveConverterTests
         };
 
         var converter = new PixelInterleaveConverter(channelList, "R", "G", "B", "A");
-        converter.FromEXR(new Bounds<int>(0, 0, 4, 1), source, dest, 0);
+        converter.FromEXR(new Bounds<int>(0, 0, 4, 1), source, dest);
 
         // RGBA RGBA RGBA RGBA
         var expected = StringToPixelData("AB CD EFGH IJ   KL MN OPQR ST   UV WX YZ01 23   45 67 89ab cd");

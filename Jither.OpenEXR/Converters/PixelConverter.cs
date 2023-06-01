@@ -7,6 +7,6 @@ namespace Jither.OpenEXR.Converters;
 /// </summary>
 internal abstract class PixelConverter
 {
-    public abstract void ToEXR(Bounds<int> bounds, Span<byte> source, Span<byte> dest, int sourceStartOffset);
-    public abstract void FromEXR(Bounds<int> bounds, Span<byte> source, Span<byte> dest, int sourceStartOffset);
+    public abstract void ToEXR(Bounds<int> bounds, ReadOnlySpan<byte> source, Span<byte> dest);
+    public abstract void FromEXR(Bounds<int> bounds, ReadOnlySpan<byte> source, Span<byte> dest);
 }

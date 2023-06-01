@@ -9,7 +9,7 @@ internal sealed class RLECompressor : Compressor
 
     public override int ScanLinesPerChunk { get; } = EXRCompression.RLE.GetScanLinesPerChunk();
 
-    public override CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info)
+    public override CompressionResult InternalCompress(ReadOnlySpan<byte> source, Stream dest, PixelDataInfo info)
     {
         int length = info.UncompressedByteSize;
         // We only need a compressed array of the same size as uncompressed. If we're about to overflow it,
@@ -21,8 +21,7 @@ internal sealed class RLECompressor : Compressor
             int destIndex = 0;
             try
             {
-                source.Read(uncompressed, 0, length);
-                ReorderAndPredict(uncompressed, length);
+                ReorderAndPredict(source, uncompressed, length);
 
                 int runs = 0;
                 int rune = 1;
@@ -92,7 +91,7 @@ internal sealed class RLECompressor : Compressor
         }
     }
 
-    public override void InternalDecompress(Stream source, Stream dest, PixelDataInfo info)
+    public override void InternalDecompress(Stream source, Span<byte> dest, PixelDataInfo info)
     {
         int length = info.UncompressedByteSize;
 
@@ -132,9 +131,7 @@ internal sealed class RLECompressor : Compressor
             }
 
             int outputLength = bufferIndex;
-            UnpredictAndReorder(buffer, outputLength);
-
-            dest.Write(buffer, 0, outputLength);
+            UnpredictAndReorder(buffer, dest, outputLength);
         }
         finally
         {

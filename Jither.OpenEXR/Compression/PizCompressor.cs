@@ -41,125 +41,115 @@ internal sealed class PizCompressor : Compressor
         }
     }
 
-    public override CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info)
+    public override CompressionResult InternalCompress(ReadOnlySpan<byte> source, Stream dest, PixelDataInfo info)
     {
         // TODO: Bit of a nested nightmare here, due to ArrayPool returns.
 
-        var uncompressedScanlineBytes = ArrayPool<byte>.Shared.Rent(info.UncompressedByteSize);
+        var channelInfos = CreateChannelInfos(info);
+        int uncompressedUShortSize = info.UncompressedByteSize / 2;
+
+        // PIZ uncompressed data should store all scanlines for each channel consecutively -
+        // e.g. A for all scanlines, followed by B for all scanlines, followed by G, followed by R.
+        // Here we do the rearrangement:
+        var uncompressedArray = ArrayPool<ushort>.Shared.Rent(uncompressedUShortSize);
         try
         {
-            source.ReadExactly(uncompressedScanlineBytes, 0, info.UncompressedByteSize);
+            // The array may (mostly will) not be the size of the data. We use a span over the exact size for convenience
+            var uncompressed = uncompressedArray.AsSpan(0, uncompressedUShortSize);
 
-            var channelInfos = CreateChannelInfos(info);
-            int uncompressedUShortSize = info.UncompressedByteSize / 2;
+            int nextByteOffset = 0;
+            for (int y = info.Bounds.Top; y < info.Bounds.Bottom; y++)
+            {
+                foreach (var channel in channelInfos)
+                {
+                    if (y % channel.YSampling != 0)
+                    {
+                        continue;
+                    }
+                    var byteSize = channel.BytesPerLine;
+                    var ushortSize = channel.UShortsPerLine;
+                    var channelScanline = MemoryMarshal.Cast<byte, ushort>(source.Slice(nextByteOffset, byteSize));
+                    var resultSpan = uncompressed.Slice(channel.NextScanLineUShortOffset, ushortSize);
+                    channel.NextScanLineUShortOffset += ushortSize;
+                    channelScanline.CopyTo(resultSpan);
+                    nextByteOffset += byteSize;
+                }
+            }
 
-            // PIZ uncompressed data should store all scanlines for each channel consecutively -
-            // e.g. A for all scanlines, followed by B for all scanlines, followed by G, followed by R.
-            // Here we do the rearrangement:
-            var uncompressedArray = ArrayPool<ushort>.Shared.Rent(uncompressedUShortSize);
+            byte[] bitmapArray = ArrayPool<byte>.Shared.Rent(BITMAP_SIZE);
             try
             {
-                // The array may (mostly will) not be the size of the data. We use a span over the exact size for convenience
-                var uncompressed = uncompressedArray.AsSpan(0, uncompressedUShortSize);
+                var bitmap = bitmapArray.AsSpan(0, BITMAP_SIZE);
+                // Bitmap is sparsely populated, so need to clear it before use
+                bitmap.Clear();
 
-                int nextByteOffset = 0;
-                for (int y = info.Bounds.Top; y < info.Bounds.Bottom; y++)
-                {
-                    foreach (var channel in channelInfos)
-                    {
-                        if (y % channel.YSampling != 0)
-                        {
-                            continue;
-                        }
-                        var byteSize = channel.BytesPerLine;
-                        var ushortSize = channel.UShortsPerLine;
-                        var channelScanline = MemoryMarshal.Cast<byte, ushort>(uncompressedScanlineBytes.AsSpan(nextByteOffset, byteSize));
-                        var resultSpan = uncompressed.Slice(channel.NextScanLineUShortOffset, ushortSize);
-                        channel.NextScanLineUShortOffset += ushortSize;
-                        channelScanline.CopyTo(resultSpan);
-                        nextByteOffset += byteSize;
-                    }
-                }
-
-                byte[] bitmapArray = ArrayPool<byte>.Shared.Rent(BITMAP_SIZE);
+                (var minNonZero, var maxNonZero) = BitmapFromData(uncompressed, bitmap);
+                ushort[] lutArray = ArrayPool<ushort>.Shared.Rent(LUT_SIZE);
                 try
                 {
-                    var bitmap = bitmapArray.AsSpan(0, BITMAP_SIZE);
-                    // Bitmap is sparsely populated, so need to clear it before use
-                    bitmap.Clear();
+                    var lut = lutArray.AsSpan(0, LUT_SIZE);
 
-                    (var minNonZero, var maxNonZero) = BitmapFromData(uncompressed, bitmap);
-                    ushort[] lutArray = ArrayPool<ushort>.Shared.Rent(LUT_SIZE);
-                    try
+                    var maxValue = ForwardLUTFromBitmap(bitmap, lut);
+                    ApplyLUT(lut, uncompressed);
+
+                    foreach (var channelInfo in channelInfos)
                     {
-                        var lut = lutArray.AsSpan(0, LUT_SIZE);
-
-                        var maxValue = ForwardLUTFromBitmap(bitmap, lut);
-                        ApplyLUT(lut, uncompressed);
-
-                        foreach (var channelInfo in channelInfos)
+                        var data = uncompressed.Slice(channelInfo.StartUShortOffset, channelInfo.UShortsTotal);
+                        // For 32 bit channels, each half is transformed separately:
+                        for (int offset = 0; offset < channelInfo.UShortsPerPixel; offset++)
                         {
-                            var data = uncompressed.Slice(channelInfo.StartUShortOffset, channelInfo.UShortsTotal);
-                            // For 32 bit channels, each half is transformed separately:
-                            for (int offset = 0; offset < channelInfo.UShortsPerPixel; offset++)
-                            {
-                                Wavelet.Encode2D(
-                                    data[offset..],
-                                    channelInfo.Resolution.X,
-                                    channelInfo.UShortsPerPixel,
-                                    channelInfo.Resolution.Y,
-                                    channelInfo.UShortsPerLine,
-                                    maxValue
-                                );
-                            }
+                            Wavelet.Encode2D(
+                                data[offset..],
+                                channelInfo.Resolution.X,
+                                channelInfo.UShortsPerPixel,
+                                channelInfo.Resolution.Y,
+                                channelInfo.UShortsPerLine,
+                                maxValue
+                            );
                         }
-                    }
-                    finally
-                    {
-                        ArrayPool<ushort>.Shared.Return(lutArray);
-                    }
-
-                    var compressed = HuffmanCoding.Compress(uncompressed);
-
-                    int bitmapSize = 4 + maxNonZero - minNonZero + 1;
-                    if (compressed.Length + bitmapSize + 4 >= info.UncompressedByteSize)
-                    {
-                        return CompressionResult.NoGain;
-                    }
-
-                    using (var writer = new BinaryWriter(dest, Encoding.UTF8, leaveOpen: true))
-                    {
-                        writer.Write((ushort)minNonZero);
-                        writer.Write((ushort)maxNonZero);
-                        // Bitmap is stored only from the first to the last non-zero value
-                        // If first is larger than last non-zero value, the bitmap is all 0, and we don't store anything
-                        if (minNonZero <= maxNonZero)
-                        {
-                            writer.Write(bitmap.Slice(minNonZero, maxNonZero - minNonZero + 1));
-                        }
-                        writer.Write(compressed.Length);
-                        writer.Write(compressed);
-
-                        return CompressionResult.Success;
                     }
                 }
                 finally
                 {
-                    ArrayPool<byte>.Shared.Return(bitmapArray);
+                    ArrayPool<ushort>.Shared.Return(lutArray);
+                }
+
+                var compressed = HuffmanCoding.Compress(uncompressed);
+
+                int bitmapSize = 4 + maxNonZero - minNonZero + 1;
+                if (compressed.Length + bitmapSize + 4 >= info.UncompressedByteSize)
+                {
+                    return CompressionResult.NoGain;
+                }
+
+                using (var writer = new BinaryWriter(dest, Encoding.UTF8, leaveOpen: true))
+                {
+                    writer.Write((ushort)minNonZero);
+                    writer.Write((ushort)maxNonZero);
+                    // Bitmap is stored only from the first to the last non-zero value
+                    // If first is larger than last non-zero value, the bitmap is all 0, and we don't store anything
+                    if (minNonZero <= maxNonZero)
+                    {
+                        writer.Write(bitmap.Slice(minNonZero, maxNonZero - minNonZero + 1));
+                    }
+                    writer.Write(compressed.Length);
+                    writer.Write(compressed);
+
+                    return CompressionResult.Success;
                 }
             }
             finally
             {
-                ArrayPool<ushort>.Shared.Return(uncompressedArray);
+                ArrayPool<byte>.Shared.Return(bitmapArray);
             }
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(uncompressedScanlineBytes);
+            ArrayPool<ushort>.Shared.Return(uncompressedArray);
         }
     }
 
-    public override void InternalDecompress(Stream source, Stream dest, PixelDataInfo info)
+    public override void InternalDecompress(Stream source, Span<byte> dest, PixelDataInfo info)
     {
         // TODO: Bit of a nested nightmare here, due to ArrayPool returns.
         int uncompressedUShortSize = info.UncompressedByteSize / 2;
@@ -206,31 +196,22 @@ internal sealed class PizCompressor : Compressor
                 // The uncompressed PIZ data stores all scanlines for each channel consecutively -
                 // e.g. A for all scanlines, followed by B for all scanlines, followed by G, followed by R.
                 // Split into scanlines, each containing its own (e.g.) ABGR channels.
-                var result = ArrayPool<byte>.Shared.Rent(decompressedAsBytes.Length);
-                try
+                int destIndex = 0;
+                for (int y = info.Bounds.Top; y < info.Bounds.Bottom; y++)
                 {
-                    int resultIndex = 0;
-                    for (int y = info.Bounds.Top; y < info.Bounds.Bottom; y++)
+                    foreach (var channel in channelInfos)
                     {
-                        foreach (var channel in channelInfos)
+                        if (y % channel.YSampling != 0)
                         {
-                            if (y % channel.YSampling != 0)
-                            {
-                                continue;
-                            }
-                            var size = channel.BytesPerLine;
-                            var channelScanline = decompressedAsBytes.Slice(channel.NextScanLineByteOffset, size);
-                            channel.NextScanLineByteOffset += size;
-                            var resultSpan = result.AsSpan(resultIndex, size);
-                            channelScanline.CopyTo(resultSpan);
-                            resultIndex += size;
+                            continue;
                         }
+                        var size = channel.BytesPerLine;
+                        var channelScanline = decompressedAsBytes.Slice(channel.NextScanLineByteOffset, size);
+                        channel.NextScanLineByteOffset += size;
+                        var resultSpan = dest.Slice(destIndex, size);
+                        channelScanline.CopyTo(resultSpan);
+                        destIndex += size;
                     }
-                    dest.Write(result, 0, decompressedAsBytes.Length);
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(result);
                 }
             }
             finally

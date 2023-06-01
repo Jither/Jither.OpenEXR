@@ -6,14 +6,14 @@ internal sealed class NullCompressor : Compressor
 
     public override int ScanLinesPerChunk { get; } = EXRCompression.None.GetScanLinesPerChunk();
 
-    public override CompressionResult InternalCompress(Stream source, Stream dest, PixelDataInfo info)
+    public override CompressionResult InternalCompress(ReadOnlySpan<byte> source, Stream dest, PixelDataInfo info)
     {
-        source.CopyTo(dest);
+        dest.Write(source);
         return CompressionResult.Success;
     }
 
-    public override void InternalDecompress(Stream source, Stream dest, PixelDataInfo info)
+    public override void InternalDecompress(Stream source, Span<byte> dest, PixelDataInfo info)
     {
-        source.CopyTo(dest);
+        source.ReadExactly(dest);
     }
 }

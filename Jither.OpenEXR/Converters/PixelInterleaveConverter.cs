@@ -22,14 +22,14 @@ internal class PixelInterleaveConverter : PixelConverter
         this.channelOrder = BuildChannelOrder(channels, channelOrder, out interleavedBytesPerPixel);
     }
 
-    public override void ToEXR(Bounds<int> bounds, Span<byte> source, Span<byte> dest, int sourceStartOffset)
+    public override void ToEXR(Bounds<int> bounds, ReadOnlySpan<byte> source, Span<byte> dest)
     {
         int destOffset = 0;
         int scanlineCount = bounds.Height;
         for (int scanline = 0; scanline < scanlineCount; scanline++)
         {
             int channelIndex = 0;
-            int scanlineOffset = sourceStartOffset + scanline * bounds.Width * interleavedBytesPerPixel;
+            int scanlineOffset = scanline * bounds.Width * interleavedBytesPerPixel;
             foreach (var channel in channels)
             {
                 int channelBytesPerPixel = channel.Type.GetBytesPerPixel();
@@ -56,7 +56,7 @@ internal class PixelInterleaveConverter : PixelConverter
         }
     }
 
-    public override void FromEXR(Bounds<int> bounds, Span<byte> source, Span<byte> dest, int destStartOffset)
+    public override void FromEXR(Bounds<int> bounds, ReadOnlySpan<byte> source, Span<byte> dest)
     {
         int sourceOffset = 0;
         int scanlineCount = bounds.Height;
@@ -64,7 +64,7 @@ internal class PixelInterleaveConverter : PixelConverter
         for (int scanline = 0; scanline < scanlineCount; scanline++)
         {
             int channelIndex = 0;
-            int scanlineOffset = destStartOffset + scanline * bounds.Width * interleavedBytesPerPixel;
+            int scanlineOffset = scanline * bounds.Width * interleavedBytesPerPixel;
 
             foreach (var channel in channels)
             {
