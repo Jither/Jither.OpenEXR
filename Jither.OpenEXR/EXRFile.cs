@@ -210,7 +210,7 @@ public class EXRFile : IDisposable
     {
         foreach (var part in parts)
         {
-            part.PrepareForWriting(version.IsMultiPart);
+            part.PrepareForWriting(version.IsMultiPart, version.HasNonImageParts);
         }
         Validate(version);
 

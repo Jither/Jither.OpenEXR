@@ -9,7 +9,7 @@ public class TileTests
     public void TileDesc_calculates_correct_mipmap_level_resolutions_down()
     {
         var tileDesc = new TileDesc(16, 16, LevelMode.MipMap, RoundingMode.Down);
-        var tileInfo = tileDesc.GetTileInformation(15, 17);
+        var tileInfo = tileDesc.GetTilingInformation(15, 17);
         Assert.Collection(tileInfo.Levels,
             level => {
                 Assert.Equal(15, level.Width);
@@ -38,7 +38,7 @@ public class TileTests
     public void TileDesc_calculates_correct_mipmap_level_resolutions_up()
     {
         var tileDesc = new TileDesc(16, 16, LevelMode.MipMap, RoundingMode.Up);
-        var tileInfo = tileDesc.GetTileInformation(15, 17);
+        var tileInfo = tileDesc.GetTilingInformation(15, 17);
         Assert.Collection(tileInfo.Levels,
             level => {
                 Assert.Equal(15, level.Width);
@@ -65,5 +65,16 @@ public class TileTests
                 Assert.Equal(1, level.Height);
             }
         );
+    }
+
+    [Fact]
+    public void TilingInformation_has_correct_information()
+    {
+        var tileDesc = new TileDesc(16, 16, LevelMode.MipMap, RoundingMode.Up);
+        var tilingInfo = tileDesc.GetTilingInformation(315, 257);
+        Assert.Equal(10, tilingInfo.LevelXCount);
+        Assert.Equal(10, tilingInfo.LevelYCount);
+        Assert.Equal(10, tilingInfo.Levels.Count);
+        Assert.Equal(20 * 17 + 10 * 9 + 5 * 5 + 3 * 3 + 2 * 2 + 1 * 1 + 1 * 1 + 1 * 1 + 1 * 1 + 1 * 1, tilingInfo.TotalChunkCount);
     }
 }

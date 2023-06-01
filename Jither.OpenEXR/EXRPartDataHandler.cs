@@ -77,26 +77,9 @@ public abstract class EXRPartDataHandler
         {
             ChunkCount = part.GetAttributeOrThrow<int>("chunkCount");
         }
-        else if (version.IsSinglePartTiled)
-        {
-            var tiles = part.Tiles ?? throw new EXRFormatException($"Missing tiles attribute for single tiled part");
-            // "In a file with multiple levels, tiles have the same size, regardless of their level. Lower-resolution levels contain fewer, rather than smaller, tiles."
-            // So, we need to figure out the number of tiles required to cover DataWindow at each level.
-            ChunkCount = 0;
-            int totalWidth = part.DataWindow.Width;
-            int totalHeight = part.DataWindow.Height;
-            var tileInfo = tiles.GetTileInformation(totalWidth, totalHeight);
-            foreach (var level in tileInfo.Levels)
-            {
-                // TODO: Move calculation to TileInformation
-                ChunkCount += MathHelpers.DivAndRoundUp(level.Width, tiles.XSize) * MathHelpers.DivAndRoundUp(level.Height, tiles.YSize);
-            }
-        }
         else
         {
-            // Tiled files are either multi-part - in which case they must have an explicit chunkCount attribute,
-            // or they have a single-part-tiled version flag, handled above. Hence, this must be a scanline part:
-            ChunkCount = MathHelpers.DivAndRoundUp(part.DataWindow.Height, compressor.ScanLinesPerChunk);
+            ChunkCount = part.GetCalculatedChunkCount();
         }
     }
 }

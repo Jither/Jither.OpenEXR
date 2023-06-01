@@ -1,5 +1,6 @@
 ﻿using Jither.OpenEXR.Compression;
 using Jither.OpenEXR.Converters;
+using Jither.OpenEXR.Drawing;
 using System.Buffers;
 
 namespace Jither.OpenEXR;
@@ -61,15 +62,12 @@ public class EXRPartDataReader : EXRPartDataHandler
             throw new ArgumentException($"Destination array too small ({dest.Length}) to fit pixel data ({totalBytes})");
         }
 
-        if (IsScanLine)
+        int destIndex = 0;
+        for (int i = 0; i < ChunkCount; i++)
         {
-            int destIndex = 0;
-            for (int i = 0; i < ChunkCount; i++)
-            {
-                var chunkInfo = ReadChunkHeader(i);
-                InternalReadChunk(chunkInfo, dest[destIndex..]);
-                destIndex += chunkInfo.UncompressedByteCount;
-            }
+            var chunkInfo = ReadChunkHeader(i);
+            InternalReadChunk(chunkInfo, dest[destIndex..]);
+            destIndex += chunkInfo.UncompressedByteCount;
         }
     }
 
@@ -90,7 +88,24 @@ public class EXRPartDataReader : EXRPartDataHandler
             throw new ArgumentNullException(nameof(dest));
         }
 
-        // TODO: ...
+        var tilingInfo = part.Tiles.GetTilingInformation(part.DisplayWindow.Width, part.DisplayWindow.Height);
+        var level = tilingInfo.GetLevel(xLevel, yLevel);
+        // TODO: Calculate total bytes required for this level, and check with dest.Length
+
+        byte[] tileDest = ArrayPool<byte>.Shared.Rent(part.Channels.GetByteCount(new Bounds<int>(0, 0, part.Tiles.XSize, part.Tiles.YSize)));
+        try
+        {
+            for (int i = level.FirstChunkIndex; i < level.FirstChunkIndex + level.ChunkCount; i++)
+            {
+                var chunkInfo = ReadChunkHeader(i);
+                InternalReadChunk(chunkInfo, tileDest.AsSpan(0, chunkInfo.UncompressedByteCount));
+                // TODO: Write the tile to dest.
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(tileDest);
+        }
     }
 
     public void ReadChunk(int chunkIndex, Span<byte> dest)
@@ -121,7 +136,7 @@ public class EXRPartDataReader : EXRPartDataHandler
             try
             {
                 InternalReadChunk(chunkInfo, pixelData);
-                converter.FromEXR(chunkInfo.GetBounds(), pixelData[..chunkInfo.UncompressedByteCount], dest[destIndex..]);
+                converter.FromEXR(chunkInfo.GetBounds(), pixelData.AsSpan(0, chunkInfo.UncompressedByteCount), dest[destIndex..]);
                 destIndex += chunkInfo.UncompressedByteCount;
             }
             finally
@@ -144,7 +159,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         try
         {
             InternalReadChunk(chunkInfo, pixelData);
-            converter.FromEXR(chunkInfo.GetBounds(), pixelData[..chunkInfo.UncompressedByteCount], dest);
+            converter.FromEXR(chunkInfo.GetBounds(), pixelData.AsSpan(0, chunkInfo.UncompressedByteCount), dest);
             return chunkInfo;
         }
         finally

@@ -1,5 +1,7 @@
 ﻿using Jither.OpenEXR.Drawing;
+using Jither.OpenEXR.Helpers;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace Jither.OpenEXR.Attributes;
 
@@ -12,9 +14,9 @@ public record TileDesc(int XSize, int YSize, LevelMode LevelMode, RoundingMode R
     {
     }
 
-    public TileInformation GetTileInformation(int imageWidth, int imageHeight)
+    public TilingInformation GetTilingInformation(int imageWidth, int imageHeight)
     {
-        return new TileInformation(this, imageWidth, imageHeight);
+        return new TilingInformation(this, imageWidth, imageHeight);
     }
 }
 
@@ -26,6 +28,9 @@ public class TileLevel
     public int LevelX { get; }
     public int LevelY { get; }
 
+    public int FirstChunkIndex { get; internal set; }
+    public int ChunkCount { get; internal set; }
+
     public TileLevel(int levelX, int levelY, int width, int height)
     {
         LevelX = levelX;
@@ -35,19 +40,73 @@ public class TileLevel
     }
 }
 
-public class TileInformation
+public class TilingInformation
 {
     private readonly int imageWidth;
     private readonly int imageHeight;
     private readonly TileDesc tileDesc;
     public IReadOnlyList<TileLevel> Levels { get; }
 
-    public TileInformation(TileDesc tileDesc, int imageWidth, int imageHeight)
+    public int LevelXCount { get; private set; }
+    public int LevelYCount { get; private set; }
+
+
+    public int TotalChunkCount { get; private set; }
+
+    public TilingInformation(TileDesc tileDesc, int imageWidth, int imageHeight)
     {
         this.tileDesc = tileDesc;
         this.imageWidth = imageWidth;
         this.imageHeight = imageHeight;
-        Levels = CalculateLevels();
+        switch (tileDesc.LevelMode)
+        {
+            case LevelMode.One:
+                LevelXCount = 1;
+                LevelYCount = 1;
+                break;
+            case LevelMode.MipMap:
+                LevelXCount = LevelYCount = RoundToInt(Math.Log2(Math.Max(imageWidth, imageHeight))) + 1;
+                break;
+            case LevelMode.RipMap:
+                LevelXCount = RoundToInt(Math.Log2(imageWidth)) + 1;
+                LevelYCount = RoundToInt(Math.Log2(imageHeight)) + 1;
+                break;
+            default:
+                throw new NotSupportedException($"Unsupported level mode: {tileDesc.LevelMode}");
+        }
+        (Levels, TotalChunkCount) = CalculateLevels();
+    }
+
+    public TileLevel GetLevel(int levelX, int levelY)
+    {
+        switch (tileDesc.LevelMode)
+        {
+            case LevelMode.MipMap:
+                if (levelX != levelY)
+                {
+                    throw new ArgumentException($"For mipmap parts, level number must be {nameof(levelX)} = {nameof(levelY)}");
+                }
+                if (levelX >= Levels.Count)
+                {
+                    throw new ArgumentOutOfRangeException($"This mipmap part has {Levels.Count} levels - level number must be between (0,0) and ({LevelXCount},{LevelYCount})");
+                }
+                return Levels[levelX];
+            case LevelMode.One:
+            case LevelMode.RipMap:
+                int levelIndex = levelY * LevelXCount + levelX;
+                if (levelIndex < 0 || levelIndex > Levels.Count)
+                {
+                    throw new ArgumentOutOfRangeException($"Level number for this part must be between (0,0) and ({LevelXCount},{LevelYCount})");
+                }
+                return Levels[levelX];
+            default:
+                throw new NotSupportedException($"Unsupported level mode: {tileDesc.LevelMode}");
+        }
+    }
+
+    private int RoundToInt(double value)
+    {
+        return tileDesc.RoundingMode == RoundingMode.Down ? (int)value : (int)(Math.Ceiling(value));
     }
 
     private int DivideWithRounding(int a, int b)
@@ -59,7 +118,7 @@ public class TileInformation
         return a / b + (a % b > 0 ? 1 : 0);
     }
 
-    private IReadOnlyList<TileLevel> CalculateLevels()
+    private (IReadOnlyList<TileLevel> levels, int totalChunkCount) CalculateLevels()
     {
         var levels = new List<TileLevel>();
         int width = imageWidth;
@@ -106,6 +165,15 @@ public class TileInformation
             case LevelMode.One:
                 break;
         }
-        return levels;
+
+        int chunkIndex = 0;
+        foreach (var level in levels)
+        {
+            level.FirstChunkIndex = chunkIndex;
+            level.ChunkCount = MathHelpers.DivAndRoundUp(level.Width, tileDesc.XSize) * MathHelpers.DivAndRoundUp(level.Height, tileDesc.YSize);
+            chunkIndex += level.ChunkCount;
+        }
+
+        return (levels, chunkIndex);
     }
 }

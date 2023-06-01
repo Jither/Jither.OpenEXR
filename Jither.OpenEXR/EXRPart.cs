@@ -1,5 +1,7 @@
 ﻿using Jither.OpenEXR.Attributes;
 using Jither.OpenEXR.Compression;
+using Jither.OpenEXR.Helpers;
+using System;
 using System.ComponentModel.DataAnnotations;
 
 namespace Jither.OpenEXR;
@@ -54,8 +56,18 @@ public class EXRPart
     /// </summary>
     public string? Name
     {
-        get => header.Name;
-        set => header.Name = value;
+        get => header.GetAttributeOrDefault<string>(AttributeNames.Name);
+        set
+        {
+            if (value == null)
+            {
+                header.RemoveAttribute(AttributeNames.Name);
+            }
+            else
+            {
+                header.SetAttribute(new EXRAttribute<string>(AttributeNames.Name, value));
+            }
+        }
     }
 
     /// <summary>
@@ -73,7 +85,7 @@ public class EXRPart
     /// </remarks>
     public PartType Type
     {
-        get => header.Type switch
+        get => header.GetAttributeOrDefault<string>(AttributeNames.Type) switch
         {
             "scanlineimage" => PartType.ScanLineImage,
             "tiledimage" => PartType.TiledImage,
@@ -83,7 +95,7 @@ public class EXRPart
         };
         set
         {
-            header.Type = value switch
+            var type = value switch
             {
                 PartType.ScanLineImage => "scanlineimage",
                 PartType.TiledImage => "tiledimage",
@@ -91,6 +103,14 @@ public class EXRPart
                 PartType.DeepTiled => "deeptile",
                 _ => null,
             };
+            if (type == null)
+            {
+                header.RemoveAttribute(AttributeNames.Type);
+            }
+            else
+            {
+                header.SetAttribute(new EXRAttribute<string>(AttributeNames.Type, type));
+            }
         }
     }
 
@@ -99,8 +119,8 @@ public class EXRPart
     /// </summary>
     public ChannelList Channels
     {
-        get => header.Channels;
-        set => header.Channels = value;
+        get => header.GetAttributeOrThrow<ChannelList>(AttributeNames.Channels);
+        set => header.SetAttribute(new EXRAttribute<ChannelList>(AttributeNames.Channels, value));
     }
 
     /// <summary>
@@ -108,8 +128,8 @@ public class EXRPart
     /// </summary>
     public EXRCompression Compression
     {
-        get => header.Compression;
-        set => header.Compression = value;
+        get => header.GetAttributeOrThrow<EXRCompression>(AttributeNames.Compression);
+        set => header.SetAttribute(new EXRAttribute<EXRCompression>(AttributeNames.Compression, value));
     }
 
     /// <summary>
@@ -118,8 +138,8 @@ public class EXRPart
     /// </summary>
     public Box2i DisplayWindow
     {
-        get => header.DisplayWindow;
-        set => header.DisplayWindow = value;
+        get => header.GetAttributeOrThrow<Box2i>(AttributeNames.DisplayWindow);
+        set => header.SetAttribute(new EXRAttribute<Box2i>(AttributeNames.DisplayWindow, value));
     }
 
     /// <summary>
@@ -128,8 +148,8 @@ public class EXRPart
     /// </summary>
     public Box2i DataWindow
     {
-        get => header.DataWindow;
-        set => header.DataWindow = value;
+        get => header.GetAttributeOrThrow<Box2i>(AttributeNames.DataWindow);
+        set => header.SetAttribute(new EXRAttribute<Box2i>(AttributeNames.DataWindow, value));
     }
 
     /// <summary>
@@ -137,8 +157,8 @@ public class EXRPart
     /// </summary>
     public LineOrder LineOrder
     {
-        get => header.LineOrder;
-        set => header.LineOrder = value;
+        get => header.GetAttributeOrThrow<LineOrder>(AttributeNames.LineOrder);
+        set => header.SetAttribute(new EXRAttribute<LineOrder>(AttributeNames.LineOrder, value));
     }
 
     /// <summary>
@@ -147,8 +167,8 @@ public class EXRPart
     /// </summary>
     public float PixelAspectRatio
     {
-        get => header.PixelAspectRatio;
-        set => header.PixelAspectRatio = value;
+        get => header.GetAttributeOrThrow<float>(AttributeNames.PixelAspectRatio);
+        set => header.SetAttribute(new EXRAttribute<float>(AttributeNames.PixelAspectRatio, value));
     }
 
     /// <summary>
@@ -158,8 +178,8 @@ public class EXRPart
     /// </summary>
     public V2f ScreenWindowCenter
     {
-        get => header.ScreenWindowCenter;
-        set => header.ScreenWindowCenter = value;
+        get => header.GetAttributeOrThrow<V2f>(AttributeNames.ScreenWindowCenter);
+        set => header.SetAttribute(new EXRAttribute<V2f>(AttributeNames.ScreenWindowCenter, value));
     }
 
     /// <summary>
@@ -169,8 +189,8 @@ public class EXRPart
     /// </summary>
     public float ScreenWindowWidth
     {
-        get => header.ScreenWindowWidth;
-        set => header.ScreenWindowWidth = value;
+        get => header.GetAttributeOrThrow<float>(AttributeNames.ScreenWindowWidth);
+        set => header.SetAttribute(new EXRAttribute<float>(AttributeNames.ScreenWindowWidth, value));
     }
 
     /// <summary>
@@ -182,9 +202,53 @@ public class EXRPart
     /// </remarks>
     public TileDesc? Tiles
     {
-        get => header.Tiles;
-        set => header.Tiles = value;
+        get => header.GetAttributeOrDefault<TileDesc>(AttributeNames.Tiles);
+        set
+        {
+            if (value != null)
+            {
+                header.SetAttribute(new EXRAttribute<TileDesc>(AttributeNames.Tiles, value));
+            }
+            else
+            {
+                header.RemoveAttribute(AttributeNames.Tiles);
+            }
+        }
     }
+
+    /// <summary>
+    /// Specifies the view this part is associated with (mostly used for files which stereo views).
+    /// 
+    /// * A value of left indicate the part is associated with the left eye.
+    /// * A value of right indicates the right eye
+    /// 
+    /// If there is no view attribute in the header, the entire part contains information not dependent on a particular eye.
+    /// 
+    /// This attribute can be used in the header for multi-part files.
+    /// </summary>
+    public string? View
+    {
+        get => header.GetAttributeOrDefault<string>(AttributeNames.View);
+        set
+        {
+            if (value != null)
+            {
+                header.SetAttribute(new EXRAttribute<string>(AttributeNames.View, value));
+            }
+            else
+            {
+                header.RemoveAttribute(AttributeNames.View);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Version is required for deep data (deepscanline and deeptile) parts. If not specified for other parts, 1 is assumed.
+    /// </summary>
+    /// <remarks>
+    /// When writing, Jither.OpenEXR will automatically add this attribute if needed. Hence, it cannot be set.
+    /// </remarks>
+    public int Version => header.GetAttributeOrDefault<int?>(AttributeNames.Version) ?? 1;
 
     /// <summary>
     /// Indicates whether the part is tiled - that is, whether it has a tiled type attribute or it's in a file with a "single part tiled" version bit.
@@ -239,13 +303,13 @@ public class EXRPart
         Type = type;
 
         // Set default required headers:
-        header.DataWindow = dataWindow;
-        header.DisplayWindow = displayWindow ?? header.DataWindow;
-        header.Compression = EXRCompression.None;
-        header.LineOrder = LineOrder.IncreasingY;
-        header.PixelAspectRatio = 1;
-        header.ScreenWindowCenter = new V2f(0, 0);
-        header.ScreenWindowWidth = 1;
+        DataWindow = dataWindow;
+        DisplayWindow = displayWindow ?? dataWindow;
+        Compression = EXRCompression.None;
+        LineOrder = LineOrder.IncreasingY;
+        PixelAspectRatio = 1;
+        ScreenWindowCenter = new V2f(0, 0);
+        ScreenWindowWidth = 1;
     }
 
     internal EXRPart(EXRHeader header, bool isSinglePartTiled, EXRReadOptions readOptions)
@@ -258,6 +322,25 @@ public class EXRPart
     internal void AssignFile(EXRFile file)
     {
         this.file = file;
+    }
+
+    /// <summary>
+    /// Calculates the chunk count based on the current part setup (width, height, tiling, compression etc.)
+    /// </summary>
+    internal int GetCalculatedChunkCount()
+    {
+        if (IsTiled)
+        {
+            var tiles = Tiles ?? throw new EXRFormatException($"Missing tiles attribute for single tiled part");
+            // "In a file with multiple levels, tiles have the same size, regardless of their level. Lower-resolution levels contain fewer, rather than smaller, tiles."
+            // So, we need to figure out the number of tiles required to cover DataWindow at each level.
+            int totalWidth = DataWindow.Width;
+            int totalHeight = DataWindow.Height;
+            var tilingInfo = tiles.GetTilingInformation(totalWidth, totalHeight);
+            return tilingInfo.TotalChunkCount;
+        }
+
+        return MathHelpers.DivAndRoundUp(DataWindow.Height, Compression.GetScanLinesPerChunk());
     }
 
     /// <summary>
@@ -315,15 +398,18 @@ public class EXRPart
         this.DataWriter = writer;
     }
 
-    internal void PrepareForWriting(bool fileIsMultiPart)
+    /// <summary>
+    /// Called before writing the part to calculate required attributes.
+    /// </summary>
+    internal void PrepareForWriting(bool fileIsMultiPart, bool fileHasDeepData)
     {
         if (fileIsMultiPart)
         {
-            if (!header.HasAttribute(AttributeNames.ChunkCount))
-            {
-                int chunkCount = (int)Math.Ceiling((double)DataWindow.Height / Compression.GetScanLinesPerChunk());
-                SetAttribute(AttributeNames.ChunkCount, chunkCount);
-            }
+            SetAttribute(AttributeNames.ChunkCount, GetCalculatedChunkCount());
+        }
+        if (fileHasDeepData)
+        {
+            SetAttribute(AttributeNames.Version, 1);
         }
     }
 
@@ -447,6 +533,6 @@ public class EXRPart
     /// </summary>
     public bool HasChannel(string name)
     {
-        return header.Channels.Any(c => c.Name == name);
+        return Channels.Any(c => c.Name == name);
     }
 }

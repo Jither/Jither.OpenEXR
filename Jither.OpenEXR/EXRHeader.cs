@@ -19,129 +19,6 @@ internal class EXRHeader
 
     public bool IsEmpty => attributes.Count == 0;
 
-    public ChannelList Channels
-    {
-        get => GetAttributeOrThrow<ChannelList>(AttributeNames.Channels);
-        set => SetAttribute(new EXRAttribute<ChannelList>(AttributeNames.Channels, value));
-    }
-
-    public EXRCompression Compression
-    {
-        get => GetAttributeOrThrow<EXRCompression>(AttributeNames.Compression);
-        set => SetAttribute(new EXRAttribute<EXRCompression>(AttributeNames.Compression, value));
-    }
-
-    public Box2i DataWindow
-    {
-        get => GetAttributeOrThrow<Box2i>(AttributeNames.DataWindow);
-        set => SetAttribute(new EXRAttribute<Box2i>(AttributeNames.DataWindow, value));
-    }
-
-    public Box2i DisplayWindow
-    {
-        get => GetAttributeOrThrow<Box2i>(AttributeNames.DisplayWindow);
-        set => SetAttribute(new EXRAttribute<Box2i>(AttributeNames.DisplayWindow, value));
-    }
-
-    public LineOrder LineOrder
-    {
-        get => GetAttributeOrThrow<LineOrder>(AttributeNames.LineOrder);
-        set => SetAttribute(new EXRAttribute<LineOrder>(AttributeNames.LineOrder, value));
-    }
-
-    public float PixelAspectRatio
-    {
-        get => GetAttributeOrThrow<float>(AttributeNames.PixelAspectRatio);
-        set => SetAttribute(new EXRAttribute<float>(AttributeNames.PixelAspectRatio, value));
-    }
-
-    public V2f ScreenWindowCenter
-    {
-        get => GetAttributeOrThrow<V2f>(AttributeNames.ScreenWindowCenter);
-        set => SetAttribute(new EXRAttribute<V2f>(AttributeNames.ScreenWindowCenter, value));
-    }
-
-    public float ScreenWindowWidth
-    {
-        get => GetAttributeOrThrow<float>(AttributeNames.ScreenWindowWidth);
-        set => SetAttribute(new EXRAttribute<float>(AttributeNames.ScreenWindowWidth, value));
-    }
-
-    public TileDesc? Tiles
-    {
-        get => GetAttributeOrDefault<TileDesc>(AttributeNames.Tiles);
-        set
-        {
-            if (value != null)
-            {
-                SetAttribute(new EXRAttribute<TileDesc>(AttributeNames.Tiles, value));
-            }
-            else
-            {
-                RemoveAttribute(AttributeNames.Tiles);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Specifies the view this part is associated with (mostly used for files which stereo views).
-    /// 
-    /// * A value of left indicate the part is associated with the left eye.
-    /// * A value of right indicates the right eye
-    /// 
-    /// If there is no view attribute in the header, the entire part contains information not dependent on a particular eye.
-    /// 
-    /// This attribute can be used in the header for multi-part files.
-    /// </summary>
-    public string? View => GetAttributeOrDefault<string>(AttributeNames.View);
-
-    public string? Name
-    {
-        get => GetAttributeOrDefault<string>(AttributeNames.Name);
-        set
-        {
-            if (value == null)
-            {
-                RemoveAttribute(AttributeNames.Name);
-            }
-            else
-            {
-                SetAttribute(new EXRAttribute<string>(AttributeNames.Name, value));
-            }
-        }
-    }
-
-    public string? Type
-    {
-        get => GetAttributeOrDefault<string>(AttributeNames.Type);
-        set
-        {
-            if (value == null)
-            {
-                RemoveAttribute(AttributeNames.Type);
-            }
-            else
-            {
-                SetAttribute(new EXRAttribute<string>(AttributeNames.Type, value));
-            }
-        }
-    }
-
-    /// <summary>
-    /// Version is required for deep data (deepscanline and deeptile) parts. If not specified for other parts, 1 is assumed.
-    /// </summary>
-    public int Version => GetAttributeOrDefault<int?>(AttributeNames.Version) ?? 1;
-
-    /// <summary>
-    /// Indicates the number of chunks in this part. Required if the multipart bit (12) is set.
-    /// </summary>
-    public int ChunkCount => GetAttributeOrDefault<int?>(AttributeNames.ChunkCount) ?? 1;
-
-    /// <summary>
-    /// For RGB images, specifies the CIE (x,y) chromaticities of the primaries and the white point.
-    /// </summary>
-    public Chromaticities Chromaticities => GetAttributeOrDefault<Chromaticities>(AttributeNames.Chromaticities) ?? DefaultChromaticities;
-
     public EXRHeader()
     {
     }
@@ -203,7 +80,7 @@ internal class EXRHeader
         return attribute;
     }
 
-    private T? GetAttributeOrDefault<T>(string name)
+    public T? GetAttributeOrDefault<T>(string name)
     {
         if (!TryGetAttribute<T>(name, out var attribute) || attribute == null)
         {
