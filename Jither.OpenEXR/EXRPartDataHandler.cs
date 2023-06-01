@@ -84,9 +84,9 @@ public abstract class EXRPartDataHandler
             ChunkCount = 0;
             int totalWidth = part.DataWindow.Width;
             int totalHeight = part.DataWindow.Height;
-            foreach (var coverage in tiles.Coverages)
+            foreach (var level in tiles.Levels)
             {
-                ChunkCount += MathHelpers.DivAndRoundUp(totalWidth, coverage.Width) * MathHelpers.DivAndRoundUp(totalHeight, coverage.Height);
+                ChunkCount += MathHelpers.DivAndRoundUp(totalWidth, level.Coverage.Width) * MathHelpers.DivAndRoundUp(totalHeight, level.Coverage.Height);
             }
         }
         else
