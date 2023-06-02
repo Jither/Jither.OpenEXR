@@ -1,5 +1,4 @@
-﻿using Jither.OpenEXR.Attributes;
-using Jither.OpenEXR.Compression;
+﻿using Jither.OpenEXR.Compression;
 using Jither.OpenEXR.Converters;
 using Jither.OpenEXR.Drawing;
 using System.Buffers;
@@ -77,7 +76,7 @@ public class EXRPartDataReader : EXRPartDataHandler
     /// </summary>
     public void Read(Span<byte> dest, int xLevel, int yLevel)
     {
-        if (part.Tiles == null)
+        if (!IsTiled || part.Tiles == null)
         {
             throw new InvalidOperationException("Attempt to read tiled level from non-tiled part.");
         }
@@ -89,10 +88,10 @@ public class EXRPartDataReader : EXRPartDataHandler
             throw new ArgumentNullException(nameof(dest));
         }
 
-        var tilingInfo = part.Tiles.GetTilingInformation(part.DataWindow.ToBounds());
+        var tilingInfo = part.TilingInformation;
         var level = tilingInfo.GetLevel(xLevel, yLevel);
         // The position of the bounds doesn't matter here - since tiles do not support sub-sampling, all pixels have the same byte size.
-        var totalBytes = part.Channels.GetByteCount(new Bounds<int>(0, 0, level.DataWindow.Width, level.DataWindow.Height));
+        var totalBytes = level.TotalByteCount;
         if (dest.Length < totalBytes)
         {
             throw new ArgumentException($"Destination array too small ({dest.Length}) to fit pixel data ({totalBytes})");
@@ -103,7 +102,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         {
             for (int i = level.FirstChunkIndex; i < level.FirstChunkIndex + level.ChunkCount; i++)
             {
-                var chunkInfo = ReadChunkHeader(i);
+                var chunkInfo = ReadChunkHeader(i, level);
                 InternalReadChunk(chunkInfo, tileDest.AsSpan(0, chunkInfo.UncompressedByteCount));
                 if (chunkInfo is not TileChunkInfo tileChunkInfo)
                 {
@@ -118,7 +117,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
     }
 
-    private void DrawTile(TileLevel level, TileChunkInfo chunkInfo, Span<byte> tile, Span<byte> dest)
+    private void DrawTile(TilingLevel level, TileChunkInfo chunkInfo, Span<byte> tile, Span<byte> dest)
     {
         int destX = chunkInfo.X;
         int destY = chunkInfo.Y;
@@ -127,30 +126,59 @@ public class EXRPartDataReader : EXRPartDataHandler
         int tileWidth = Math.Min(part.Tiles.XSize, destWidth - destX);
         int tileHeight = Math.Min(part.Tiles.YSize, destHeight - destY);
         int bytesPerPixel = part.Channels.BytesPerPixelNoSubSampling;
-        var bytesPerChannel = part.Channels.Select(c => c.BytesPerPixelNoSubSampling);
         int bytesPerTileScanline = bytesPerPixel * tileWidth;
-        var bytesPerTileScanlineChannel = bytesPerChannel.Select(c => c * tileWidth).ToArray();
         int bytesPerDestScanline = bytesPerPixel * destWidth;
-        var bytesPerDestScanlineChannel = bytesPerChannel.Select(c => c * destWidth).ToArray();
+        int channelCount = part.Channels.Count;
+
+        int[] bytesPerChannel = new int[channelCount];
+        int[] bytesPerTileScanlineChannel = new int[channelCount];
+        int[] bytesPerDestScanlineChannel = new int[channelCount];
+
+        int channelIndex = 0;
+        foreach (var channel in part.Channels)
+        {
+            // We don't need to deal with sub-sampling - OpenEXR tiled images don't support sub-sampling
+            int byteCount = channel.BytesPerPixelNoSubSampling;
+            bytesPerChannel[channelIndex] = byteCount;
+            bytesPerTileScanlineChannel[channelIndex] = byteCount * tileWidth;
+            bytesPerDestScanlineChannel[channelIndex] = byteCount * destWidth;
+            channelIndex++;
+        }
+
+        int tileOffset = 0;
+        int destOffset = destY * bytesPerDestScanline;
 
         for (int tileY = 0; tileY < tileHeight; tileY++)
         {
-            int tileIndex = tileY * bytesPerTileScanline;
-            int destIndex = destY * bytesPerDestScanline;
+            // Offset from start of tile scanline to start of current channel data
             int tileChannelOffset = 0;
-            int destChannelOffset = destX * bytesPerChannel.First();
-            for (int i = 0; i < bytesPerTileScanlineChannel.Length; i++)
+            
+            // Offset from start of destination scanline to start of current channel data. Remember that we're dealing with
+            // scanline interleaved channels. Example:
+            //
+            // AAAAAAAAAAAAAAAAAAAAA
+            // BBBBBBBBBBBBBBBBBBBBB
+            // GGGGGGGGGGGGGGGGGGGGG
+            // RRRRRRRRRRRRRRRRRRRRR
+            //
+            // We'll want to start writing after the first channel's (here, alpha/A) samples of the pixels to the left of the tile.
+            // Hence, x coordinate of tile within destination multiplied by the size of the first channel's samples:
+            int destChannelOffset = destX * bytesPerChannel[0];
+            
+            for (int i = 0; i < channelCount; i++)
             {
-                int byteCount = bytesPerTileScanlineChannel[i];
-                if (destIndex + destChannelOffset + byteCount > dest.Length)
-                {
-                    return;
-                }
-                tile.Slice(tileIndex + tileChannelOffset, byteCount).CopyTo(dest[(destIndex + destChannelOffset)..]);
-                tileChannelOffset += byteCount;
+                // Write 1 channel from 1 scanline:
+                int count = bytesPerTileScanlineChannel[i];
+
+                tile.Slice(tileOffset + tileChannelOffset, count).CopyTo(dest[(destOffset + destChannelOffset)..]);
+                tileChannelOffset += count;
+                // Place next offset at the same x position within the next channel's data:
                 destChannelOffset += bytesPerDestScanlineChannel[i];
             }
             destY++;
+            // Move 1 scanline forward, for the tile and dest respectively
+            tileOffset += bytesPerTileScanline;
+            destOffset += bytesPerDestScanline;
         }
     }
 
@@ -214,7 +242,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
     }
 
-    private ChunkInfo ReadChunkHeader(int chunkIndex)
+    private ChunkInfo ReadChunkHeader(int chunkIndex, TilingLevel? level = null)
     {
         var offset = OffsetTable[chunkIndex];
 
@@ -237,7 +265,10 @@ public class EXRPartDataReader : EXRPartDataHandler
             int y = reader.ReadInt();
             int levelX = reader.ReadInt();
             int levelY = reader.ReadInt();
-            chunkInfo = new TileChunkInfo(part, chunkIndex, x, y, levelX, levelY);
+
+            level ??= part.TilingInformation.GetLevel(0, 0);
+
+            chunkInfo = new TileChunkInfo(part, chunkIndex, level, x, y, levelX, levelY);
         }
         else
         {

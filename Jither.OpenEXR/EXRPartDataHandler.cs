@@ -18,7 +18,7 @@ public abstract class EXRPartDataHandler
     protected bool IsScanLine => part.IsScanLine;
 
     /// <summary>
-    /// Returns the number of bytes needed to contain the part's complete pixel data.
+    /// Returns the number of bytes needed to contain the part's complete pixel data. 
     /// </summary>
     /// <remarks>
     /// This will throw <see cref="EXRFormatException"/> for byte counts above 2GB. A .NET array wouldn't be able to hold the complete image.
@@ -40,7 +40,7 @@ public abstract class EXRPartDataHandler
 
     /// <summary>
     /// Returns the number of bytes needed to contain the part's complete pixel data. Unlike <see cref="GetTotalByteCount"/>, this allows computing
-    /// sizes (way) larger than 2GB.
+    /// sizes (way) larger than 2GB. For multi-resolution, this returns the bytes needed for the first level (0, 0).
     /// </summary>
     public ulong GetTotalByteCountLarge()
     {

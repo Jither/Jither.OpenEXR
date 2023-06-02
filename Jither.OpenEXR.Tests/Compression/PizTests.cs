@@ -87,7 +87,7 @@ public class PizTests
         Assert.Equal(original, transformed);
     }
 
-    ushort[] noise_14bit(Random rnd, int size)
+    static ushort[] Noise14Bit(Random rnd, int size)
     {
         var result = new ushort[size];
         for (int i = 0; i < size; i++)
@@ -97,7 +97,7 @@ public class PizTests
         return result;
     }
 
-    ushort[] noise_16bit(Random rnd, int size)
+    static ushort[] Noise16Bit(Random rnd, int size)
     {
         var result = new ushort[size];
         for (int i = 0; i < size; i++)
@@ -123,9 +123,9 @@ public class PizTests
 
         int size = width * height;
 
-        roundtrip(noise_14bit(rnd, size));
-        roundtrip(noise_14bit(rnd, size));
-        roundtrip(noise_16bit(rnd, size));
+        roundtrip(Noise14Bit(rnd, size));
+        roundtrip(Noise14Bit(rnd, size));
+        roundtrip(Noise16Bit(rnd, size));
         roundtrip(solid(0));
         roundtrip(solid(1));
         roundtrip(solid(0xffff));
@@ -247,7 +247,7 @@ public class PizTests
     };
 
     [Fact]
-    void Huffman_repetitions_special()
+    public void Huffman_repetitions_special()
     {
         var uncompressed = UNCOMPRESSED_ARRAY_SPECIAL;
         var compressed = HuffmanCoding.Compress(uncompressed);
@@ -257,7 +257,7 @@ public class PizTests
     }
 
     [Fact]
-    void Huffman_zeroes()
+    public void Huffman_zeroes()
     {
         var uncompressed = new ushort[] { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
         var compressed = HuffmanCoding.Compress(uncompressed);
@@ -267,19 +267,19 @@ public class PizTests
     }
 
     [Fact]
-    void Huffman_compression_result()
+    public void Huffman_compression_result()
     {
         var compressed = HuffmanCoding.Compress(UNCOMPRESSED_ARRAY);
         Assert.Equal(COMPRESSED_ARRAY, compressed);
     }
 
     [Fact]
-    void Huffman_longcodes()
+    public void Huffman_longcodes()
     {
         // This exercises the longcode implementation
         var rnd = new Random(1234);
 
-        var uncompressed = noise_16bit(rnd, 17000);
+        var uncompressed = Noise16Bit(rnd, 17000);
         var compressed = HuffmanCoding.Compress(uncompressed);
         var decompressed = new ushort[uncompressed.Length];
         HuffmanCoding.Decompress(compressed, decompressed, compressed.Length);

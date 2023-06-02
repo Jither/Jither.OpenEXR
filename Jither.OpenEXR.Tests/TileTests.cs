@@ -9,8 +9,8 @@ public class TileTests
     public void TileDesc_calculates_correct_mipmap_level_resolutions_down()
     {
         var tileDesc = new TileDesc(16, 16, LevelMode.MipMap, RoundingMode.Down);
-        var tileInfo = tileDesc.GetTilingInformation(new Bounds<int>(0, 0, 15, 17));
-        Assert.Collection(tileInfo.Levels,
+        var tilingInfo = new TilingInformation(tileDesc, new Bounds<int>(0, 0, 15, 17), ChannelList.CreateRGBAHalf());
+        Assert.Collection(tilingInfo.Levels,
             level => {
                 Assert.Equal(15, level.DataWindow.Width);
                 Assert.Equal(17, level.DataWindow.Height);
@@ -38,8 +38,8 @@ public class TileTests
     public void TileDesc_calculates_correct_mipmap_level_resolutions_up()
     {
         var tileDesc = new TileDesc(16, 16, LevelMode.MipMap, RoundingMode.Up);
-        var tileInfo = tileDesc.GetTilingInformation(new Bounds<int>(0, 0, 15, 17));
-        Assert.Collection(tileInfo.Levels,
+        var tilingInfo = new TilingInformation(tileDesc, new Bounds<int>(0, 0, 15, 17), ChannelList.CreateRGBAHalf());
+        Assert.Collection(tilingInfo.Levels,
             level => {
                 Assert.Equal(15, level.DataWindow.Width);
                 Assert.Equal(17, level.DataWindow.Height);
@@ -71,7 +71,7 @@ public class TileTests
     public void TilingInformation_has_correct_information()
     {
         var tileDesc = new TileDesc(16, 16, LevelMode.MipMap, RoundingMode.Up);
-        var tilingInfo = tileDesc.GetTilingInformation(new Bounds<int>(0, 0, 315, 257));
+        var tilingInfo = new TilingInformation(tileDesc, new Bounds<int>(0, 0, 315, 257), ChannelList.CreateRGBAHalf());
         Assert.Equal(10, tilingInfo.LevelXCount);
         Assert.Equal(10, tilingInfo.LevelYCount);
         Assert.Equal(10, tilingInfo.Levels.Count);

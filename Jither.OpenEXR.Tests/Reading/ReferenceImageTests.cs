@@ -209,6 +209,36 @@ public class ReferenceImageTests
     }
 
     [Theory]
+    [InlineData("MultiResolution/Bonita.exr")]
+    [InlineData("MultiResolution/ColorCodedLevels.exr", Skip = "We don't support PXR24 compression")]
+    [InlineData("MultiResolution/Kapaa.exr")]
+    [InlineData("MultiResolution/KernerEnvCube.exr")]
+    [InlineData("MultiResolution/KernerEnvLatLong.exr")]
+    [InlineData("MultiResolution/MirrorPattern.exr")]
+    [InlineData("MultiResolution/OrientationCube.exr")]
+    [InlineData("MultiResolution/OrientationLatLong.exr")]
+    [InlineData("MultiResolution/PeriodicPattern.exr")]
+    [InlineData("MultiResolution/StageEnvCube.exr")]
+    [InlineData("MultiResolution/StageEnvLatLong.exr")]
+    [InlineData("MultiResolution/WavyLinesCube.exr")]
+    [InlineData("MultiResolution/WavyLinesLatLong.exr")]
+    [InlineData("MultiResolution/WavyLinesSphere.exr")]
+    public void Reads_reference_image_MultiResolution(string imagePath)
+    {
+        var path = Path.Combine(BasePath, imagePath);
+        using (var file = new EXRFile(path))
+        {
+            Assert.Equal(2, file.OriginalVersion.Number);
+            Assert.False(file.OriginalVersion.IsMultiPart);
+            Assert.Equal(1, file.Parts.Count);
+            var part = file.Parts[0];
+
+            // TODO: Tests specific to multi-resolution
+            TestReadParts(file.Parts);
+        }
+    }
+
+    [Theory]
     [InlineData("DisplayWindow/t01.exr", 0, 0, 399, 299)]
     [InlineData("DisplayWindow/t02.exr", 1, 1, 400, 300)]
     [InlineData("DisplayWindow/t03.exr", 30, 20, 399, 299)]

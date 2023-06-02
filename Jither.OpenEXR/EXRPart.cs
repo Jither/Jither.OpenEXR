@@ -1,8 +1,7 @@
 ﻿using Jither.OpenEXR.Attributes;
-using Jither.OpenEXR.Compression;
+using Jither.OpenEXR.Drawing;
 using Jither.OpenEXR.Helpers;
-using System;
-using System.ComponentModel.DataAnnotations;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Jither.OpenEXR;
 
@@ -12,6 +11,7 @@ public class EXRPart
     private readonly bool isSinglePartTiled;
     private readonly EXRReadOptions? readOptions;
     private EXRFile? file;
+    private TilingInformation? tilingInformation;
 
     /// <summary>
     /// Attributes required by spec and which will be required even in lax mode.
@@ -253,6 +253,7 @@ public class EXRPart
     /// <summary>
     /// Indicates whether the part is tiled - that is, whether it has a tiled type attribute or it's in a file with a "single part tiled" version bit.
     /// </summary>
+    [MemberNotNullWhen(true, nameof(TilingInformation))]
     public bool IsTiled => Type == PartType.TiledImage || Type == PartType.DeepTiled || isSinglePartTiled;
 
     /// <summary>
@@ -291,6 +292,21 @@ public class EXRPart
     public int PartNumber => file?.GetPartNumber(this) ?? -1;
 
     /// <summary>
+    /// Provides tiling information for the current part, including information on all tiling levels. Null for parts where <see cref="IsTiled"/> is false.
+    /// </summary>
+    public TilingInformation? TilingInformation
+    {
+        get
+        {
+            if (!IsTiled)
+            {
+                return null;
+            }
+            return tilingInformation ??= new TilingInformation(this);
+        }
+    }
+
+    /// <summary>
     /// Creates a new part with default required attributes.
     /// </summary>
     public EXRPart(Box2i dataWindow, Box2i? displayWindow = null, string? name = null, PartType type = PartType.Unknown)
@@ -312,6 +328,11 @@ public class EXRPart
         ScreenWindowWidth = 1;
     }
 
+    public EXRPart(Bounds<int> dataWindow, Bounds<int>? displayWindow = null, string? name = null, PartType type = PartType.Unknown) : this(new Box2i(dataWindow), displayWindow != null ? new Box2i(displayWindow) : null, name, type)
+    {
+
+    }
+
     internal EXRPart(EXRHeader header, bool isSinglePartTiled, EXRReadOptions readOptions)
     {
         this.header = header;
@@ -331,9 +352,7 @@ public class EXRPart
     {
         if (IsTiled)
         {
-            var tiles = Tiles ?? throw new EXRFormatException($"Missing tiles attribute for single tiled part");
-            var tilingInfo = tiles.GetTilingInformation(DataWindow.ToBounds());
-            return tilingInfo.TotalChunkCount;
+            return TilingInformation.TotalChunkCount;
         }
 
         return MathHelpers.DivAndRoundUp(DataWindow.Height, Compression.GetScanLinesPerChunk());
