@@ -10,8 +10,8 @@ Current state
 * Sub-sampling support
 * Supports all attributes
 * Single or multi-part
-* Reads Scanline and Tiled images.
-* Write Scanline images only for now. (Allows converting Tiled to Scanline).
+* Reads Scanline and Tiled (including multi-resolution) images.
+* Writes Scanline images only for now. (Supports converting Tiled to Scanline).
 
 TODO
 ----
