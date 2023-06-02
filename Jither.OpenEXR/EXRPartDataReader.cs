@@ -81,15 +81,23 @@ public class EXRPartDataReader : EXRPartDataHandler
             throw new InvalidOperationException("Attempt to read tiled level from non-tiled part.");
         }
 
-        part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
+        var tilingInfo = part.TilingInformation;
+        var level = tilingInfo.GetLevel(xLevel, yLevel);
+        Read(dest, level);
+    }
 
+    /// <summary>
+    /// Reads the image data from the given multi-resolution level into a scanline-interleaved array (the standard OpenEXR image data layout).
+    /// </summary>
+    public void Read(Span<byte> dest, TilingLevel level)
+    {
         if (dest == null)
         {
             throw new ArgumentNullException(nameof(dest));
         }
 
-        var tilingInfo = part.TilingInformation;
-        var level = tilingInfo.GetLevel(xLevel, yLevel);
+        part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
+
         // The position of the bounds doesn't matter here - since tiles do not support sub-sampling, all pixels have the same byte size.
         var totalBytes = level.TotalByteCount;
         if (dest.Length < totalBytes)

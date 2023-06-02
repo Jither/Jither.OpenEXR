@@ -1,6 +1,6 @@
 # Jither.OpenEXR
 
-Jither.OpenEXR is a C#/.NET library for reading and writing [OpenEXR](https://openexr.com/) image files.
+Jither.OpenEXR is a native C#/.NET library for reading and writing [OpenEXR](https://openexr.com/) image files.
 
 Current state
 -------------

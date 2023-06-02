@@ -19,6 +19,10 @@
     "3 - Multi-part": {
       "commandName": "Project",
       "commandLineArgs": "3"
+    },
+    "4 - Convert multi-resolution": {
+      "commandName": "Project",
+      "commandLineArgs": "4"
     }
   }
 }

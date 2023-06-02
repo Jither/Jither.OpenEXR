@@ -1,10 +1,17 @@
-﻿using System.Diagnostics;
+﻿using Jither.OpenEXR.Attributes;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 
 namespace Jither.OpenEXR;
 
 public class EXRReadOptions
 {
+    /// <summary>
+    /// Although not specified in OpenEXR documentation, a few attributes are "shared"/"common", meaning they should have
+    /// the same value for all parts in a multi-part file.
+    /// </summary>
+    public bool StrictSharedAttributes { get; set; } = true;
+
     /// <summary>
     /// OpenEXR specs require some attributes (<see cref="EXRPart.StrictlyRequiredAttributes"/> which, nonetheless,
     /// aren't checked, and which some - otherwise valid - EXR files are missing. This settings allows disabling
@@ -204,6 +211,8 @@ public class EXRFile : IDisposable
             // when it's present.
             partOffsetTableOffset += dataReader.ChunkCount * 8;
         }
+
+        ValidateAfterReadHeaders(readOptions);
     }
 
     private void WriteHeaders(EXRWriter writer, EXRVersion version)
@@ -292,6 +301,37 @@ public class EXRFile : IDisposable
         foreach (var part in parts)
         {
             part.ValidateAttributes(version.IsMultiPart, version.HasNonImageParts);
+        }
+
+        CheckSharedAttributes();
+    }
+
+    private void ValidateAfterReadHeaders(EXRReadOptions options)
+    {
+        if (options.StrictSharedAttributes)
+        {
+            CheckSharedAttributes();
+        }
+    }
+
+    private void CheckSharedAttributes()
+    {
+        CheckSharedAttribute<Box2i>(AttributeNames.DisplayWindow);
+        CheckSharedAttribute<float>(AttributeNames.PixelAspectRatio);
+        CheckSharedAttribute<TimeCode>(AttributeNames.TimeCode);
+        CheckSharedAttribute<Chromaticities>(AttributeNames.Chromaticities);
+    }
+
+    private void CheckSharedAttribute<T>(string attributeName)
+    {
+        var first = parts[0].GetAttribute<T>(attributeName);
+        for (int i = 1; i < parts.Count; i++)
+        {
+            var value = parts[i].GetAttribute<T>(attributeName);
+            if (!Object.Equals(value, first))
+            {
+                throw new EXRFormatException($"Shared attribute '{attributeName}' must have the same value in all parts in a file. Found '{value}' in part {i}, which does not agree with '{first}' in part 0.");
+            }
         }
     }
 

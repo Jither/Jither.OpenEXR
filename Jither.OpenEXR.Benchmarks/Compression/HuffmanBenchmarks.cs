@@ -7,7 +7,7 @@ namespace Jither.OpenEXR.Benchmarks.Compression;
 [InliningDiagnoser(true, new string[] { "Jither.OpenEXR.Compression" })]
 public class HuffmanBenchmarks
 {
-    private ushort[] noise_16bit(Random rnd, int size)
+    private static ushort[] Noise16Bit(Random rnd, int size)
     {
         var result = new ushort[size];
         for (int i = 0; i < size; i++)
@@ -23,7 +23,7 @@ public class HuffmanBenchmarks
         // This exercises the longcode implementation
         var rnd = new Random(1234);
 
-        var uncompressed = noise_16bit(rnd, 17000);
+        var uncompressed = Noise16Bit(rnd, 17000);
         var compressed = HuffmanCoding.Compress(uncompressed);
         var decompressed = new ushort[uncompressed.Length];
         HuffmanCoding.Decompress(compressed, decompressed, compressed.Length);
