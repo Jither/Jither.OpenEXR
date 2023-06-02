@@ -76,6 +76,8 @@ public class Channel
 
     public bool IsSubsampled => XSampling != 1 || YSampling != 1;
 
+    internal int BytesPerPixelNoSubSampling => Type.GetBytesPerPixel();
+
     public Channel(string name, EXRDataType type, PerceptualTreatment perceptualTreatment, int xSampling = 1, int ySampling = 1)
     {
         Name = name;

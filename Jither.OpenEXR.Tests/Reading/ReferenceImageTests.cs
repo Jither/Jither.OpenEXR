@@ -275,6 +275,39 @@ public class ReferenceImageTests
     }
 
     [Theory]
+    [InlineData("Tiles/GoldenGate.exr", new[] { "B", "G", "R" }, EXRCompression.PIZ)]
+    [InlineData("Tiles/Ocean.exr", new[] { "B", "G", "R" }, EXRCompression.ZIP)]
+    [InlineData("Tiles/Spirals.exr", new[] { "A", "B", "G", "R", "Z" }, EXRCompression.PXR24)]
+    public void Reads_reference_image_Tiles(string imagePath, string[] channels, EXRCompression compression)
+    {
+        var path = Path.Combine(BasePath, imagePath);
+        using (var file = new EXRFile(path))
+        {
+            Assert.Equal(2, file.OriginalVersion.Number);
+            Assert.False(file.OriginalVersion.IsMultiPart);
+            Assert.Equal(1, file.Parts.Count);
+            var part = file.Parts[0];
+            // Instead of multiple parts, these images hold the data in additional channels
+            Assert.Equal(channels.Length, part.Channels.Count);
+
+            Assert.Equal(channels, part.Channels.Names);
+
+            Assert.Equal(compression, part.Compression);
+            Assert.Equal(LineOrder.IncreasingY, part.LineOrder);
+            // These images don't specify their part type - but mark SinglePartTiled
+            Assert.Equal(PartType.Unknown, part.Type);
+            Assert.True(part.IsTiled);
+
+            Assert.Equal(1, part.PixelAspectRatio);
+
+            if (compression != EXRCompression.PXR24)
+            {
+                TestReadParts(file.Parts);
+            }
+        }
+    }
+
+    [Theory]
     [InlineData("Scanlines/Cannon.exr")]
     [InlineData("LuminanceChroma/CrissyField.exr")]
     [InlineData("LuminanceChroma/Flowers.exr")]

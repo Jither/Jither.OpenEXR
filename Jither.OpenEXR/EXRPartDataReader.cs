@@ -1,4 +1,5 @@
-﻿using Jither.OpenEXR.Compression;
+﻿using Jither.OpenEXR.Attributes;
+using Jither.OpenEXR.Compression;
 using Jither.OpenEXR.Converters;
 using Jither.OpenEXR.Drawing;
 using System.Buffers;
@@ -88,9 +89,14 @@ public class EXRPartDataReader : EXRPartDataHandler
             throw new ArgumentNullException(nameof(dest));
         }
 
-        var tilingInfo = part.Tiles.GetTilingInformation(part.DisplayWindow.Width, part.DisplayWindow.Height);
+        var tilingInfo = part.Tiles.GetTilingInformation(part.DataWindow.ToBounds());
         var level = tilingInfo.GetLevel(xLevel, yLevel);
-        // TODO: Calculate total bytes required for this level, and check with dest.Length
+        // The position of the bounds doesn't matter here - since tiles do not support sub-sampling, all pixels have the same byte size.
+        var totalBytes = part.Channels.GetByteCount(new Bounds<int>(0, 0, level.DataWindow.Width, level.DataWindow.Height));
+        if (dest.Length < totalBytes)
+        {
+            throw new ArgumentException($"Destination array too small ({dest.Length}) to fit pixel data ({totalBytes})");
+        }
 
         byte[] tileDest = ArrayPool<byte>.Shared.Rent(part.Channels.GetByteCount(new Bounds<int>(0, 0, part.Tiles.XSize, part.Tiles.YSize)));
         try
@@ -99,12 +105,52 @@ public class EXRPartDataReader : EXRPartDataHandler
             {
                 var chunkInfo = ReadChunkHeader(i);
                 InternalReadChunk(chunkInfo, tileDest.AsSpan(0, chunkInfo.UncompressedByteCount));
-                // TODO: Write the tile to dest.
+                if (chunkInfo is not TileChunkInfo tileChunkInfo)
+                {
+                    throw new InvalidOperationException($"{chunkInfo} is not a tile chunk");
+                }
+                DrawTile(level, tileChunkInfo, tileDest, dest);
             }
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(tileDest);
+        }
+    }
+
+    private void DrawTile(TileLevel level, TileChunkInfo chunkInfo, Span<byte> tile, Span<byte> dest)
+    {
+        int destX = chunkInfo.X;
+        int destY = chunkInfo.Y;
+        int destWidth = level.DataWindow.Width;
+        int destHeight = level.DataWindow.Height;
+        int tileWidth = Math.Min(part.Tiles.XSize, destWidth - destX);
+        int tileHeight = Math.Min(part.Tiles.YSize, destHeight - destY);
+        int bytesPerPixel = part.Channels.BytesPerPixelNoSubSampling;
+        var bytesPerChannel = part.Channels.Select(c => c.BytesPerPixelNoSubSampling);
+        int bytesPerTileScanline = bytesPerPixel * tileWidth;
+        var bytesPerTileScanlineChannel = bytesPerChannel.Select(c => c * tileWidth).ToArray();
+        int bytesPerDestScanline = bytesPerPixel * destWidth;
+        var bytesPerDestScanlineChannel = bytesPerChannel.Select(c => c * destWidth).ToArray();
+
+        for (int tileY = 0; tileY < tileHeight; tileY++)
+        {
+            int tileIndex = tileY * bytesPerTileScanline;
+            int destIndex = destY * bytesPerDestScanline;
+            int tileChannelOffset = 0;
+            int destChannelOffset = destX * bytesPerChannel.First();
+            for (int i = 0; i < bytesPerTileScanlineChannel.Length; i++)
+            {
+                int byteCount = bytesPerTileScanlineChannel[i];
+                if (destIndex + destChannelOffset + byteCount > dest.Length)
+                {
+                    return;
+                }
+                tile.Slice(tileIndex + tileChannelOffset, byteCount).CopyTo(dest[(destIndex + destChannelOffset)..]);
+                tileChannelOffset += byteCount;
+                destChannelOffset += bytesPerDestScanlineChannel[i];
+            }
+            destY++;
         }
     }
 

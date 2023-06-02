@@ -23,6 +23,8 @@ public class ChannelList : IReadOnlyList<Channel>
 
     public bool AreSubsampled => channels.Any(c => c.IsSubsampled);
 
+    internal int BytesPerPixelNoSubSampling => channels.Sum(c => c.BytesPerPixelNoSubSampling);
+
     public static ChannelList CreateRGBHalf(bool linear = false)
     {
         var result = new ChannelList

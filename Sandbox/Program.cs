@@ -10,29 +10,32 @@ internal class Program
 {
     static void Main(string[] args)
     {
-        using (var file = new EXRFile(@"D:\Downloads\zips.exr"))
+        using (var file = new EXRFile(@"..\..\..\..\Jither.OpenEXR.Tests\images\openexr-images\Tiles\Ocean.exr"))
         {
-            Console.WriteLine(JsonSerializer.Serialize(file, new JsonSerializerOptions { WriteIndented = true, Converters = { new JsonStringEnumConverter() } }));
-            var partsData = new List<byte[]>();
-            foreach (var part in file.Parts)
+            //Console.WriteLine(JsonSerializer.Serialize(file, new JsonSerializerOptions { WriteIndented = true, Converters = { new JsonStringEnumConverter() } }));
+            using (var dest = new EXRFile())
             {
-                Debug.Assert(part.DataReader != null);
+                var partsData = new List<byte[]>();
+                foreach (var part in file.Parts)
+                {
+                    Debug.Assert(part.DataReader != null);
 
-                var bytes = new byte[part.DataReader.GetTotalByteCount()];
-                part.DataReader.Read(bytes);
-                partsData.Add(bytes);
-            }
+                    var bytes = new byte[part.DataReader.GetTotalByteCount()];
+                    part.DataReader.Read(bytes);
+                    partsData.Add(bytes);
 
-            file.ForceVersion2 = true;
-            file.Parts[0].Compression = EXRCompression.ZIPS;
+                    var destPart = new EXRPart(part.DataWindow, name: part.Name, type: PartType.ScanLineImage);
+                    destPart.Channels = ChannelList.CreateRGBHalf();
+                    dest.AddPart(destPart);
+                }
+                dest.Write("Ocean-scanline.exr");
+                int partIndex = 0;
+                foreach (var part in dest.Parts)
+                {
+                    Debug.Assert(part.DataWriter != null);
 
-            file.Write(@"D:\test-zips.exr");
-            int partIndex = 0;
-            foreach (var part in file.Parts)
-            {
-                Debug.Assert(part.DataWriter != null);
-
-                part.DataWriter.Write(partsData[partIndex++]);
+                    part.DataWriter.Write(partsData[partIndex++]);
+                }
             }
         }
     }

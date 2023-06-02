@@ -10,15 +10,16 @@ Current state
 * Sub-sampling support
 * Supports all attributes
 * Single or multi-part
-* Scanline images only for now
+* Reads Scanline and Tiled images.
+* Write Scanline images only for now. (Allows converting Tiled to Scanline).
 
 TODO
 ----
 * API finalization (or even making it just barely useful). Currently, the API is very low level, requiring the user to know the OpenEXR spec, and handling color spaces and pixel formats themselves.
 
-* Support for tiled images.
-
 * Probably integration with ImageSharp.
+
+* Possibly support for writing tiled images.
 
 * Possibly support for deep data.
 

@@ -14,16 +14,15 @@ public record TileDesc(int XSize, int YSize, LevelMode LevelMode, RoundingMode R
     {
     }
 
-    public TilingInformation GetTilingInformation(int imageWidth, int imageHeight)
+    public TilingInformation GetTilingInformation(Bounds<int> dataWindow)
     {
-        return new TilingInformation(this, imageWidth, imageHeight);
+        return new TilingInformation(this, dataWindow);
     }
 }
 
 public class TileLevel
 {
-    public int Width { get; }
-    public int Height { get; }
+    public Bounds<int> DataWindow { get; }
 
     public int LevelX { get; }
     public int LevelY { get; }
@@ -31,19 +30,17 @@ public class TileLevel
     public int FirstChunkIndex { get; internal set; }
     public int ChunkCount { get; internal set; }
 
-    public TileLevel(int levelX, int levelY, int width, int height)
+    public TileLevel(int levelX, int levelY, Bounds<int> dataWindow)
     {
         LevelX = levelX;
         LevelY = levelY;
-        Width = width;
-        Height = height;
+        DataWindow = dataWindow;
     }
 }
 
 public class TilingInformation
 {
-    private readonly int imageWidth;
-    private readonly int imageHeight;
+    private readonly Bounds<int> dataWindow;
     private readonly TileDesc tileDesc;
     public IReadOnlyList<TileLevel> Levels { get; }
 
@@ -53,11 +50,10 @@ public class TilingInformation
 
     public int TotalChunkCount { get; private set; }
 
-    public TilingInformation(TileDesc tileDesc, int imageWidth, int imageHeight)
+    public TilingInformation(TileDesc tileDesc, Bounds<int> dataWindow)
     {
         this.tileDesc = tileDesc;
-        this.imageWidth = imageWidth;
-        this.imageHeight = imageHeight;
+        this.dataWindow = dataWindow;
         switch (tileDesc.LevelMode)
         {
             case LevelMode.One:
@@ -65,11 +61,11 @@ public class TilingInformation
                 LevelYCount = 1;
                 break;
             case LevelMode.MipMap:
-                LevelXCount = LevelYCount = RoundToInt(Math.Log2(Math.Max(imageWidth, imageHeight))) + 1;
+                LevelXCount = LevelYCount = RoundToInt(Math.Log2(Math.Max(dataWindow.Width, dataWindow.Height))) + 1;
                 break;
             case LevelMode.RipMap:
-                LevelXCount = RoundToInt(Math.Log2(imageWidth)) + 1;
-                LevelYCount = RoundToInt(Math.Log2(imageHeight)) + 1;
+                LevelXCount = RoundToInt(Math.Log2(dataWindow.Width)) + 1;
+                LevelYCount = RoundToInt(Math.Log2(dataWindow.Height)) + 1;
                 break;
             default:
                 throw new NotSupportedException($"Unsupported level mode: {tileDesc.LevelMode}");
@@ -121,9 +117,9 @@ public class TilingInformation
     private (IReadOnlyList<TileLevel> levels, int totalChunkCount) CalculateLevels()
     {
         var levels = new List<TileLevel>();
-        int width = imageWidth;
-        int height = imageHeight;
-        levels.Add(new TileLevel(0, 0, width, height));
+        int width = dataWindow.Width;
+        int height = dataWindow.Height;
+        levels.Add(new TileLevel(0, 0, dataWindow));
         switch (tileDesc.LevelMode)
         {
             case LevelMode.MipMap:
@@ -138,7 +134,7 @@ public class TilingInformation
                     {
                         height = DivideWithRounding(height, 2);
                     }
-                    levels.Add(new TileLevel(index, index, width, height));
+                    levels.Add(new TileLevel(index, index, new Bounds<int>(dataWindow.X, dataWindow.Y, width, height)));
                     index++;
                 }
                 break;
@@ -147,14 +143,14 @@ public class TilingInformation
                 int levelY = 0;
                 while (height > 1)
                 {
-                    width = imageWidth;
+                    width = dataWindow.Width;
 
                     height = DivideWithRounding(height, 2);
                     
                     while (width > 1)
                     {
                         width = DivideWithRounding(width, 2);
-                        levels.Add(new TileLevel(levelX, levelY, width, height));
+                        levels.Add(new TileLevel(levelX, levelY, new Bounds<int>(dataWindow.X, dataWindow.Y, width, height)));
                         levelX++;
                     }
                     levelX = 0;
@@ -170,7 +166,7 @@ public class TilingInformation
         foreach (var level in levels)
         {
             level.FirstChunkIndex = chunkIndex;
-            level.ChunkCount = MathHelpers.DivAndRoundUp(level.Width, tileDesc.XSize) * MathHelpers.DivAndRoundUp(level.Height, tileDesc.YSize);
+            level.ChunkCount = MathHelpers.DivAndRoundUp(level.DataWindow.Width, tileDesc.XSize) * MathHelpers.DivAndRoundUp(level.DataWindow.Height, tileDesc.YSize);
             chunkIndex += level.ChunkCount;
         }
 

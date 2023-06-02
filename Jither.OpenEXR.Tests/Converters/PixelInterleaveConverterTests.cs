@@ -163,7 +163,7 @@ public class PixelInterleaveConverterTests
 
         var converter = new PixelInterleaveConverter(channelList, "R", "G", "B");
 
-        Assert.Throws<ArgumentException>(() => converter.ToEXR(new Bounds<int>(0, 0, 4, 1), source, dest));
+        Assert.Throws<InvalidOperationException>(() => converter.ToEXR(new Bounds<int>(0, 0, 4, 1), source, dest));
     }
 
     [Fact]

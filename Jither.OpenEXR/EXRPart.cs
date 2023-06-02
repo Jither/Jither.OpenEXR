@@ -332,11 +332,7 @@ public class EXRPart
         if (IsTiled)
         {
             var tiles = Tiles ?? throw new EXRFormatException($"Missing tiles attribute for single tiled part");
-            // "In a file with multiple levels, tiles have the same size, regardless of their level. Lower-resolution levels contain fewer, rather than smaller, tiles."
-            // So, we need to figure out the number of tiles required to cover DataWindow at each level.
-            int totalWidth = DataWindow.Width;
-            int totalHeight = DataWindow.Height;
-            var tilingInfo = tiles.GetTilingInformation(totalWidth, totalHeight);
+            var tilingInfo = tiles.GetTilingInformation(DataWindow.ToBounds());
             return tilingInfo.TotalChunkCount;
         }
 

@@ -29,7 +29,7 @@ internal class PixelInterleaveConverter : PixelConverter
         {
             if (channelOrder[i] < 0)
             {
-                throw new ArgumentException($"Channel order for interleaved chunk is missing channel '{channels[i].Name}'.", nameof(channelOrder));
+                throw new InvalidOperationException($"Channel order for interleaved chunk is missing channel '{channels[i].Name}'.");
             }
         }
 
@@ -96,7 +96,7 @@ internal class PixelInterleaveConverter : PixelConverter
         }
     }
 
-    private static List<int> BuildChannelOrder(ChannelList channels, IEnumerable<string> channelOrder, out int bytesPerPixel, bool allChannelsRequired = false)
+    private static List<int> BuildChannelOrder(ChannelList channels, IEnumerable<string> channelOrder, out int bytesPerPixel)
     {
         var offsets = new List<int>(channels.Count);
 

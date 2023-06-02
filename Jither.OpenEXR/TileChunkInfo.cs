@@ -14,8 +14,8 @@ public class TileChunkInfo : ChunkInfo
 
     public TileChunkInfo(EXRPart part, int index, int x, int y, int levelX, int levelY) : base(part, index)
     {
-        X = x;
-        Y = y;
+        X = x * Tiles.XSize;
+        Y = y * Tiles.YSize;
         LevelX = levelX;
         LevelY = levelY;
     }
