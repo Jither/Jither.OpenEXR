@@ -6,6 +6,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Reflection.Emit;
+using System.Buffers;
 
 namespace Examples;
 
@@ -21,8 +23,6 @@ internal class ConvertMultiResolutionTiledToMultiPartScanline : Example
     {
         using (var inputFile = new EXRFile("../../../../Jither.OpenEXR.Tests/images/openexr-images/MultiResolution/Bonita.exr"))
         {
-            var levelsData = new List<byte[]>();
-
             // The input image only has one part - no need to iterate.
             var inputPart = inputFile.Parts[0];
             
@@ -33,11 +33,6 @@ internal class ConvertMultiResolutionTiledToMultiPartScanline : Example
                 int levelIndex = 0;
                 foreach (var level in inputPart.TilingInformation.Levels)
                 {
-                    var levelByteSize = level.TotalByteCount;
-                    byte[] levelData = new byte[levelByteSize];
-                    inputPart.DataReader.Read(levelData, level);
-                    levelsData.Add(levelData);
-
                     // At some point, there might be a convenience method to copy attributes etc.
                     // Multi part files need a unique name for each part.
                     // DisplayWindow must be the same for all parts in OpenEXR (it's a "shared attribute").
@@ -46,6 +41,9 @@ internal class ConvertMultiResolutionTiledToMultiPartScanline : Example
                     var outputPart = new EXRPart(new Box2i(level.DataWindow), inputPart.DisplayWindow, name: $"Resolution {levelIndex}", type: PartType.ScanLineImage);
                     outputPart.Channels = inputPart.Channels;
                     outputPart.Compression = EXRCompression.ZIP;
+                    outputPart.SetAttribute(AttributeNames.Comments, inputPart.GetAttribute<string>(AttributeNames.Comments));
+                    outputPart.SetAttribute(AttributeNames.Owner, inputPart.GetAttribute<string>(AttributeNames.Owner));
+                    outputPart.SetAttribute(AttributeNames.Wrapmodes, inputPart.GetAttribute<string>(AttributeNames.Wrapmodes));
 
                     outputFile.AddPart(outputPart);
 
@@ -54,10 +52,24 @@ internal class ConvertMultiResolutionTiledToMultiPartScanline : Example
 
                 outputFile.Write("output-converted.exr");
 
-                int dataIndex = 0;
+                levelIndex = 0;
                 foreach (var outputPart in outputFile.Parts)
                 {
-                    outputPart.DataWriter.Write(levelsData[dataIndex++]);
+                    var level = inputPart.TilingInformation.Levels[levelIndex];
+                    var levelByteSize = level.TotalByteCount;
+
+                    byte[] levelData = ArrayPool<byte>.Shared.Rent(levelByteSize);
+                    try
+                    {
+                        inputPart.DataReader.Read(levelData, level);
+                        outputPart.DataWriter.Write(levelData);
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(levelData);
+                    }
+
+                    levelIndex++;
                 }
             }
         }
