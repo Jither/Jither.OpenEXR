@@ -116,7 +116,7 @@ public class EXRPartDataWriter : EXRPartDataHandler
             writer.WriteInt(chunkInfo.PartNumber);
         }
 
-        if (IsTiled)
+        if (part.IsTiled)
         {
             if (chunkInfo is not TileChunkInfo tileInfo)
             {

@@ -19,13 +19,14 @@ public class TilingInformation
 
     public int TotalChunkCount { get; private set; }
 
-    public TilingInformation(EXRPart part) : this(part.Tiles, part.DataWindow.ToBounds(), part.Channels)
+    internal TilingInformation(EXRPart part) : this(part.Tiles, part.DataWindow.ToBounds(), part.Channels)
     {
 
     }
 
-    public TilingInformation(TileDesc tileDesc, Bounds<int> bounds, ChannelList channels)
+    internal TilingInformation(TileDesc? tileDesc, Bounds<int> bounds, ChannelList channels)
     {
+        ArgumentNullException.ThrowIfNull(tileDesc);
         LevelMode = tileDesc.LevelMode;
         RoundingMode = tileDesc.RoundingMode;
         XSize = tileDesc.XSize;

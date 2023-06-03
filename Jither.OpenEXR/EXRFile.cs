@@ -39,6 +39,7 @@ public class EXRFile : IDisposable
     private readonly Dictionary<string, EXRPart> partsByName = new();
     private EXRReader? reader;
     private EXRWriter? writer;
+    private EXRVersion? originalVersion;
 
     /// <summary>
     /// List of parts contained in the file, in the order their headers appear in the file.
@@ -63,9 +64,9 @@ public class EXRFile : IDisposable
 
     /// <summary>
     /// File version information for files read from file or stream.
-    /// This will be <c>null</c> for files that have not been read from an external source (i.e. files created from scratch).
+    /// This will throw for files that have not been read from an external source (i.e. files created from scratch).
     /// </summary>
-    public EXRVersion? OriginalVersion { get; private set; }
+    public EXRVersion OriginalVersion => originalVersion ?? throw new InvalidOperationException($"{nameof(OriginalVersion)} is only available on files that have been read.");
 
     /// <summary>
     /// Creates a new, empty OpenEXR file.
@@ -168,7 +169,6 @@ public class EXRFile : IDisposable
         return parts.IndexOf(part);
     }
 
-    [MemberNotNull(nameof(OriginalVersion))]
     private void ReadHeaders(EXRReader reader, EXRReadOptions readOptions)
     {
         var magicNumber = reader.ReadInt();
@@ -177,7 +177,7 @@ public class EXRFile : IDisposable
             throw new EXRFormatException("Magic number not found.");
         }
 
-        var version = OriginalVersion = EXRVersion.ReadFrom(reader);
+        var version = originalVersion = EXRVersion.ReadFrom(reader);
 
         var headers = new List<EXRHeader>();
 

@@ -1,4 +1,5 @@
-﻿using Jither.OpenEXR.Compression;
+﻿using Jither.OpenEXR.Attributes;
+using Jither.OpenEXR.Compression;
 using Jither.OpenEXR.Converters;
 using Jither.OpenEXR.Drawing;
 using System.Buffers;
@@ -42,19 +43,19 @@ public class EXRPartDataReader : EXRPartDataHandler
     /// </remarks>
     public void Read(Span<byte> dest)
     {
-        if (IsTiled)
+        if (part.IsTiled)
         {
             // This methods reads the first level of multi-resolution tiled parts
             Read(dest, 0, 0);
             return;
         }
 
-        part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
-
         if (dest == null)
         {
             throw new ArgumentNullException(nameof(dest));
         }
+
+        part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
 
         var totalBytes = GetTotalByteCount();
         if (dest.Length < totalBytes)
@@ -76,7 +77,7 @@ public class EXRPartDataReader : EXRPartDataHandler
     /// </summary>
     public void Read(Span<byte> dest, int xLevel, int yLevel)
     {
-        if (!IsTiled || part.Tiles == null)
+        if (!part.IsTiled || part.Tiles == null)
         {
             throw new InvalidOperationException("Attempt to read tiled level from non-tiled part.");
         }
@@ -105,6 +106,11 @@ public class EXRPartDataReader : EXRPartDataHandler
             throw new ArgumentException($"Destination array too small ({dest.Length}) to fit pixel data ({totalBytes})");
         }
 
+        if (part.Tiles == null)
+        {
+            throw new EXRFormatException($"Tiled part is missing 'tiles' attribute");
+        }
+
         byte[] tileDest = ArrayPool<byte>.Shared.Rent(part.Channels.GetByteCount(new Bounds<int>(0, 0, part.Tiles.XSize, part.Tiles.YSize)));
         try
         {
@@ -116,7 +122,7 @@ public class EXRPartDataReader : EXRPartDataHandler
                 {
                     throw new InvalidOperationException($"{chunkInfo} is not a tile chunk");
                 }
-                DrawTile(level, tileChunkInfo, tileDest, dest);
+                DrawTile(part.Tiles, level, tileChunkInfo, tileDest, dest);
             }
         }
         finally
@@ -125,14 +131,14 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
     }
 
-    private void DrawTile(TilingLevel level, TileChunkInfo chunkInfo, Span<byte> tile, Span<byte> dest)
+    private void DrawTile(TileDesc tiles, TilingLevel level, TileChunkInfo chunkInfo, Span<byte> tile, Span<byte> dest)
     {
         int destX = chunkInfo.X;
         int destY = chunkInfo.Y;
         int destWidth = level.DataWindow.Width;
         int destHeight = level.DataWindow.Height;
-        int tileWidth = Math.Min(part.Tiles.XSize, destWidth - destX);
-        int tileHeight = Math.Min(part.Tiles.YSize, destHeight - destY);
+        int tileWidth = Math.Min(tiles.XSize, destWidth - destX);
+        int tileHeight = Math.Min(tiles.YSize, destHeight - destY);
         int bytesPerPixel = part.Channels.BytesPerPixelNoSubSampling;
         int bytesPerTileScanline = bytesPerPixel * tileWidth;
         int bytesPerDestScanline = bytesPerPixel * destWidth;
@@ -190,12 +196,16 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
     }
 
-    public void ReadChunk(int chunkIndex, Span<byte> dest)
+    /// <summary>
+    /// Reads image data from a single chunk (tile or scanline block) into a raw array (the standard OpenEXR image data layout).
+    /// </summary>
+    public ChunkInfo ReadChunk(int chunkIndex, Span<byte> dest)
     {
         part.ValidateAttributes(fileIsMultiPart, fileHasDeepData);
 
         var chunkInfo = ReadChunkHeader(chunkIndex);
         InternalReadChunk(chunkInfo, dest);
+        return chunkInfo;
     }
 
     public void ReadInterleaved(Span<byte> dest, string[] channelOrder)
@@ -263,7 +273,7 @@ public class EXRPartDataReader : EXRPartDataHandler
         }
 
         ChunkInfo chunkInfo;
-        if (IsTiled)
+        if (part.IsTiled)
         {
             if (reader.Remaining < 16)
             {

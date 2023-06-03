@@ -11,6 +11,8 @@ public class EXRPart
     private readonly bool isSinglePartTiled;
     private readonly EXRReadOptions? readOptions;
     private EXRFile? file;
+    private EXRPartDataReader? dataReader;
+    private EXRPartDataWriter? dataWriter;
     private TilingInformation? tilingInformation;
 
     /// <summary>
@@ -277,14 +279,14 @@ public class EXRPart
     public bool HasLongNames => Name?.Length > 31 || header.Attributes.Any(attr => attr.Name.Length > 31 || attr.Type.Length > 31);
 
     /// <summary>
-    /// Provides access to reading the data from the part. Will be null until the file headers have been read.
+    /// Provides access to reading the data from the part. Accessing before file headers have been read (during construction of file) will throw.
     /// </summary>
-    public EXRPartDataReader? DataReader { get; private set; }
+    public EXRPartDataReader DataReader => dataReader ?? throw new InvalidOperationException("Cannot access data reader before file headers have been read.");
 
     /// <summary>
     /// Provides access to writing data for a part. Will be null unless <see cref="EXRFile.Write"/> has been called and headers have been written.
     /// </summary>
-    public EXRPartDataWriter? DataWriter { get; private set; }
+    public EXRPartDataWriter DataWriter => dataWriter ?? throw new InvalidOperationException("Cannot access data writer before headers have been written (that is, the file's Write() method has been called)");
 
     /// <summary>
     /// Gets the part number of the part. -1 if the part isn't assigned to a file.
@@ -328,7 +330,8 @@ public class EXRPart
         ScreenWindowWidth = 1;
     }
 
-    public EXRPart(Bounds<int> dataWindow, Bounds<int>? displayWindow = null, string? name = null, PartType type = PartType.Unknown) : this(new Box2i(dataWindow), displayWindow != null ? new Box2i(displayWindow) : null, name, type)
+    public EXRPart(Bounds<int> dataWindow, Bounds<int>? displayWindow = null, string? name = null, PartType type = PartType.Unknown)
+        : this(new Box2i(dataWindow), displayWindow != null ? new Box2i(displayWindow) : null, name, type)
     {
 
     }
@@ -405,12 +408,12 @@ public class EXRPart
 
     internal void AssignDataReader(EXRPartDataReader reader)
     {
-        this.DataReader = reader;
+        dataReader = reader;
     }
 
     internal void AssignDataWriter(EXRPartDataWriter writer)
     {
-        this.DataWriter = writer;
+        dataWriter = writer;
     }
 
     /// <summary>

@@ -8,7 +8,7 @@ namespace Jither.OpenEXR.Benchmarks;
 
 internal class Program
 {
-    static void Main(string[] args)
+    static void Main()
     {
         BenchmarkRunner.Run<HuffmanBenchmarks>();
     }

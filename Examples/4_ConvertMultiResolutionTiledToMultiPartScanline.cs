@@ -31,16 +31,19 @@ internal class ConvertMultiResolutionTiledToMultiPartScanline : Example
             using (var outputFile = new EXRFile())
             {
                 int levelIndex = 0;
+                // Create a separate part for each input level
                 foreach (var level in inputPart.TilingInformation.Levels)
                 {
-                    // At some point, there might be a convenience method to copy attributes etc.
                     // Multi part files need a unique name for each part.
                     // DisplayWindow must be the same for all parts in OpenEXR (it's a "shared attribute").
                     // Write() (called further down) will validate this, and throw if shared attributes differ between parts.
                     // We'll just reuse the input part's display window.
-                    var outputPart = new EXRPart(new Box2i(level.DataWindow), inputPart.DisplayWindow, name: $"Resolution {levelIndex}", type: PartType.ScanLineImage);
-                    outputPart.Channels = inputPart.Channels;
-                    outputPart.Compression = EXRCompression.ZIP;
+                    var outputPart = new EXRPart(new Box2i(level.DataWindow), inputPart.DisplayWindow, name: $"Resolution {levelIndex}", type: PartType.ScanLineImage)
+                    {
+                        Channels = inputPart.Channels,
+                        Compression = EXRCompression.ZIP
+                    };
+                    // At some point, there might be a convenience method to e.g. copy all non-system attributes.
                     outputPart.SetAttribute(AttributeNames.Comments, inputPart.GetAttribute<string>(AttributeNames.Comments));
                     outputPart.SetAttribute(AttributeNames.Owner, inputPart.GetAttribute<string>(AttributeNames.Owner));
                     outputPart.SetAttribute(AttributeNames.Wrapmodes, inputPart.GetAttribute<string>(AttributeNames.Wrapmodes));
@@ -58,6 +61,9 @@ internal class ConvertMultiResolutionTiledToMultiPartScanline : Example
                     var level = inputPart.TilingInformation.Levels[levelIndex];
                     var levelByteSize = level.TotalByteCount;
 
+                    // Read methods always return pixel data in scanline interleaved format.
+                    // Write methods expect that format. Meaning conversion to scanline is a simple "read from one
+                    // file, write to another" operation.
                     byte[] levelData = ArrayPool<byte>.Shared.Rent(levelByteSize);
                     try
                     {

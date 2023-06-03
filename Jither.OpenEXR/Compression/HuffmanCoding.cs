@@ -74,8 +74,8 @@ internal static class HuffmanCoding
             throw new EXRCompressionException($"PIZ Huffman coding header truncated");
         }
         var headerSpan = compressed.AsSpan(0, headerSize);
-        var minIndex = (uint)BinaryPrimitives.ReadUInt32LittleEndian(headerSpan[..4]);
-        var maxIndex = (uint)BinaryPrimitives.ReadUInt32LittleEndian(headerSpan.Slice(4, 4));
+        var minIndex = BinaryPrimitives.ReadUInt32LittleEndian(headerSpan[..4]);
+        var maxIndex = BinaryPrimitives.ReadUInt32LittleEndian(headerSpan.Slice(4, 4));
         var tableLength = BinaryPrimitives.ReadUInt32LittleEndian(headerSpan.Slice(8, 4));
         var bitCount = BinaryPrimitives.ReadUInt32LittleEndian(headerSpan.Slice(12, 4));
         var _ = BinaryPrimitives.ReadUInt32LittleEndian(headerSpan.Slice(16, 4));

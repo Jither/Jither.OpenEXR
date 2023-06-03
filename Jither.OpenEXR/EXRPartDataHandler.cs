@@ -14,9 +14,6 @@ public abstract class EXRPartDataHandler
     protected readonly bool fileIsMultiPart;
     protected readonly bool fileHasDeepData;
 
-    protected bool IsTiled => part.IsTiled;
-    protected bool IsScanLine => part.IsScanLine;
-
     /// <summary>
     /// Returns the number of bytes needed to contain the part's complete pixel data. 
     /// </summary>
